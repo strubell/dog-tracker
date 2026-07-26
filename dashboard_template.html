@@ -1,0 +1,873 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nala's Comeback Plan</title>
+<style>
+  :root {
+    --page:       #f9f9f7;
+    --surface:    #fcfcfb;
+    --ink:        #0b0b0b;
+    --ink-2:      #52514e;
+    --ink-muted:  #898781;
+    --grid:       #e1e0d9;
+    --axis:       #c3c2b7;
+    --border:     rgba(11,11,11,0.10);
+    --series:     #2a78d6;
+    --series-2:   #1baf7a;
+    --series-wash:rgba(42,120,214,0.10);
+    --band:       #f0efec;
+    --good:       #006300;
+    --warn:       #fab219;
+    --warn-wash:  rgba(250,178,25,0.14);
+    --ramp-0: transparent; --ramp-1: #b7d3f6; --ramp-2: #86b6ef; --ramp-3: #5598e7;
+    --ramp-4: #2a78d6; --ramp-5: #1c5cab; --ramp-6: #0d366b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page:       #0d0d0d;
+      --surface:    #1a1a19;
+      --ink:        #ffffff;
+      --ink-2:      #c3c2b7;
+      --ink-muted:  #898781;
+      --grid:       #2c2c2a;
+      --axis:       #383835;
+      --border:     rgba(255,255,255,0.10);
+      --series:     #3987e5;
+      --series-2:   #199e70;
+      --series-wash:rgba(57,135,229,0.14);
+      --band:       #262624;
+      --good:       #0ca30c;
+      --warn:       #fab219;
+      --warn-wash:  rgba(250,178,25,0.12);
+      --ramp-1: #184f95; --ramp-2: #1c5cab; --ramp-3: #256abf;
+      --ramp-4: #3987e5; --ramp-5: #6da7ec; --ramp-6: #9ec5f4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .page { max-width: 1020px; margin: 0 auto; padding: 28px 20px 60px; }
+  .hrow { display: flex; align-items: center; gap: 16px; }
+  .pup { width: 76px; height: 76px; border-radius: 50%; object-fit: cover;
+         border: 1px solid var(--border); flex: none; }
+  header h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header .sub { color: var(--ink-2); }
+  header .phase-chip {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    background: var(--series-wash); color: var(--ink); font-weight: 600; font-size: 13px;
+  }
+  .stamp { color: var(--ink-muted); font-size: 13px; margin-top: 4px; }
+  .banner {
+    display: none; margin-top: 16px; padding: 10px 14px; border-radius: 10px;
+    background: var(--warn-wash); border: 1px solid var(--border); font-size: 14px;
+  }
+  .banner.show { display: flex; gap: 10px; align-items: baseline; }
+  .banner .dot { color: var(--warn); font-size: 15px; }
+  code { background: var(--band); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+
+  .toolbar { display: none; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  .toolbar.show { display: flex; }
+  .btn { font: inherit; font-size: 14px; font-weight: 600; padding: 7px 14px; border-radius: 8px;
+         border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+         cursor: pointer; }
+  .btn:hover { background: var(--band); }
+  .btn.primary { background: var(--series); border-color: var(--series); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+  .btn.yes { border-color: var(--good); color: var(--good); }
+  .btn.no { border-color: var(--axis); }
+  .toolbar input, .toolbar select { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
+                   border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
+  .toolbar .grp { display: flex; gap: 6px; align-items: center; }
+  .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
+           background: var(--ink); color: var(--page); padding: 9px 16px; border-radius: 8px;
+           font-size: 14px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+  .review-item { display: flex; align-items: center; gap: 12px; padding: 10px 0;
+                 border-bottom: 1px solid var(--grid); flex-wrap: wrap; }
+  .review-item .info { flex: 1; min-width: 200px; font-size: 14px; }
+  .review-item .info .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  .review-item .info .flag { color: var(--warn); font-weight: 600; }
+  .review-item .acts { display: flex; gap: 6px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 14px; margin: 22px 0; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+          padding: 14px 16px; }
+  .tile .label { color: var(--ink-2); font-size: 13px; }
+  .tile .value { font-size: 24px; font-weight: 600; margin: 2px 0; white-space: nowrap; }
+  .tile .value small { font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  .tile .meta { font-size: 13px; color: var(--ink-muted); }
+  .tile .delta { font-size: 13px; font-weight: 600; }
+  .tile .delta.good { color: var(--good); }
+  .tile .delta.bad { color: #d03b3b; }
+  .tile .delta.plain { color: var(--ink-2); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+          padding: 18px 20px 14px; margin-bottom: 16px; }
+  .card h2 { font-size: 16px; margin: 0 0 2px; }
+  .card .sub { color: var(--ink-muted); font-size: 13px; margin-bottom: 12px; }
+  .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .duo .card { margin-bottom: 0; }
+  .scroll { overflow-x: auto; }
+  svg { display: block; }
+  svg text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif;
+             font-variant-numeric: tabular-nums; fill: var(--ink-muted); }
+  svg .lbl { fill: var(--ink-2); }
+  [data-tip] { cursor: default; outline: none; }
+  [data-tip]:focus-visible { outline: 2px solid var(--series); outline-offset: 1px; }
+
+  #tip { position: fixed; z-index: 10; display: none; max-width: 260px; pointer-events: none;
+         background: var(--ink); color: var(--page); padding: 7px 10px; border-radius: 8px;
+         font-size: 13px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+  #tip b { display: block; }
+
+  details.tv { margin-top: 8px; }
+  details.tv summary { color: var(--ink-muted); font-size: 13px; cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 14px; }
+  th { text-align: left; color: var(--ink-2); font-weight: 600; font-size: 13px; }
+  th, td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--grid); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td a { color: var(--series); text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+
+  ol.phases { list-style: none; margin: 0; padding: 0; }
+  ol.phases li { padding: 10px 12px; border-left: 3px solid transparent; border-radius: 6px;
+                 margin-bottom: 4px; }
+  ol.phases li.now { border-left-color: var(--series); background: var(--series-wash); }
+  ol.phases li.done { color: var(--ink-muted); }
+  ol.phases .ph-t { font-weight: 600; font-size: 14px; }
+  ol.phases li.done .ph-t::after { content: " ✓"; color: var(--good); }
+  ol.phases .ph-n { font-size: 13px; color: var(--ink-2); }
+  ol.phases li.done .ph-n { color: var(--ink-muted); }
+
+  ul.notes { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  ul.notes li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
+  ul.notes .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  .dogtag { display: inline-block; font-size: 11px; font-weight: 700; color: #fff;
+            padding: 1px 8px; border-radius: 999px; margin-right: 8px; vertical-align: 1px; }
+
+  .legend { display: flex; align-items: center; gap: 6px; font-size: 12px;
+            color: var(--ink-muted); margin-top: 8px; flex-wrap: wrap; }
+  .legend .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block;
+                border: 1px solid var(--border); }
+</style>
+
+<div class="page">
+  <header>
+    <div class="hrow">
+      <img id="pup" class="pup" src="__PHOTO__" alt="Nala">
+      <div>
+        <h1>Nala's Comeback Plan</h1>
+        <div class="sub" id="subtitle"></div>
+        <div class="stamp" id="stamp"></div>
+      </div>
+    </div>
+    <div class="banner" id="banner"><span class="dot">⚠︎</span><span id="bannerText"></span></div>
+    <div class="toolbar" id="toolbar">
+      <button class="btn primary" id="syncBtn">↻ Sync now</button>
+      <div class="sep"></div>
+      <div class="grp"><select id="wDog"></select>
+        <input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
+        <button class="btn" id="wBtn">Log weight</button></div>
+      <div class="sep"></div>
+      <div class="grp"><select id="nDog"></select>
+        <input id="nIn" type="text" placeholder="add a note…" style="width:180px">
+        <button class="btn" id="nBtn">Add note</button></div>
+    </div>
+  </header>
+
+  <div class="card" id="reviewCard" style="display:none">
+    <h2 id="reviewTitle"></h2>
+    <div class="sub">Strava's API doesn't share the “with pet” tag, so confirm these here</div>
+    <div id="reviewList"></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>This week's progress</h2>
+    <div class="sub" id="cumSub"></div>
+    <div class="scroll" id="cumChart"></div>
+  </div>
+
+  <div class="card">
+    <h2>Weekly miles with the dogs</h2>
+    <div class="sub">Logged outings, including daily “circle”</div>
+    <div class="scroll" id="weeklyChart"></div>
+    <div class="legend" id="weeklyLegend"></div>
+    <details class="tv"><summary>Table view</summary><div id="weeklyTable"></div></details>
+  </div>
+
+  <div class="duo" style="margin-bottom:16px">
+    <div class="card">
+      <h2>Daily activity</h2>
+      <div class="sub">Minutes out with her each day, circles included</div>
+      <div class="scroll" id="heatmap"></div>
+      <div class="legend" id="heatLegend"></div>
+      <details class="tv"><summary>Table view</summary><div id="heatTable"></div></details>
+    </div>
+    <div class="card">
+      <h2>The 8-week plan</h2>
+      <div class="sub">Advance only after a no-joint-signs week; repeat the week otherwise</div>
+      <ol class="phases" id="phases"></ol>
+    </div>
+  </div>
+
+  <div class="duo" style="margin-bottom:16px">
+    <div class="card">
+      <h2>Weight history</h2>
+      <div class="sub">All known weigh-ins</div>
+      <div class="legend" id="weightLegend"></div>
+      <div class="scroll" id="weightHist"></div>
+      <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
+    </div>
+    <div class="card">
+      <h2>Plan progress</h2>
+      <div class="sub" id="weightSub"></div>
+      <div class="scroll" id="weightChart"></div>
+    </div>
+  </div>
+
+  <div class="card" id="feedCard" style="display:none">
+    <h2>Feeding</h2>
+    <div class="sub">Current daily rations</div>
+    <div id="feeding" style="display:flex; gap:28px; flex-wrap:wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent outings with the dogs</h2>
+    <div class="sub" id="recentSub"></div>
+    <div class="scroll" id="recent"></div>
+  </div>
+
+  <div class="card" id="notesCard" style="display:none">
+    <h2>Notes</h2>
+    <div class="sub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
+    <ul class="notes" id="notes"></ul>
+  </div>
+</div>
+<div id="tip"></div>
+<div id="toast"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const cfg = DATA.config;
+const dogColor = name =>
+  (cfg.dog_colors || {})[name] || (name === cfg.dog ? "var(--series)" : "var(--series-2)");
+{ const p = document.getElementById("pup");
+  if (!p.getAttribute("src").startsWith("data:")) p.remove(); }
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+const DAY = 86400000, WEEK = 7 * DAY;
+const pets = DATA.activities.filter(a => a.pet === true)
+                            .sort((a, b) => a.date < b.date ? -1 : 1);
+const pending = DATA.activities.filter(a => a.pet === null);
+const planStart = new Date(cfg.plan_start + "T00:00:00");
+const today = new Date(); today.setHours(0, 0, 0, 0);
+
+function mondayOf(d) {
+  const m = new Date(d); m.setHours(0, 0, 0, 0);
+  m.setDate(m.getDate() - (m.getDay() + 6) % 7);
+  return m;
+}
+// calendar-aware stepping — raw ±ms drifts an hour across DST boundaries
+function addDays(d, n) {
+  const r = new Date(d); r.setDate(r.getDate() + n);
+  return r;
+}
+const thisMonday = mondayOf(today);
+const planWeek = Math.floor((today - planStart) / WEEK) + 1;
+const iso = d => d.toISOString().slice(0, 10);
+const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const fmtDay = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const fmtTime = m => m >= 60 ? `${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}m` : `${m} min`;
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+
+function phaseFor(week) {
+  if (week < 1) return null;
+  return cfg.phases.find(p => week >= p.weeks[0] && (p.weeks[1] == null || week <= p.weeks[1]));
+}
+
+// ---- aggregates -----------------------------------------------------------
+const isRun = t => t.toLowerCase().includes("run");
+const byDay = {};      // localdate -> {min, mi, runMi, walkMi, names[]}
+for (const a of pets) {
+  const k = a.date.slice(0, 10);
+  (byDay[k] ??= { min: 0, mi: 0, runMi: 0, walkMi: 0, names: [] });
+  byDay[k].min += a.min; byDay[k].mi += a.mi; byDay[k].names.push(a.name);
+  byDay[k][isRun(a.type) ? "runMi" : "walkMi"] += a.mi;
+}
+for (const k of DATA.circles) {
+  (byDay[k] ??= { min: 0, mi: 0, runMi: 0, walkMi: 0, names: [] });
+  byDay[k].min += cfg.circle.min; byDay[k].mi += cfg.circle.mi;
+  byDay[k].walkMi += cfg.circle.mi;
+  byDay[k].names.push("Circle (baseline walk)");
+}
+function weekStats(monday) {
+  let mi = 0, min = 0, days = 0, runMi = 0, walkMi = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = byDay[localISO(addDays(monday, i))];
+    if (d) { mi += d.mi; min += d.min; days++; runMi += d.runMi; walkMi += d.walkMi; }
+  }
+  return { mi, min, days, runMi, walkMi };
+}
+
+// ---- header ---------------------------------------------------------------
+{
+  const ph = phaseFor(planWeek);
+  const label = planWeek < 1
+    ? `Plan starts ${fmtDay(planStart)}`
+    : `Week ${planWeek}` + (ph ? ` · ${ph.title}` : "");
+  const day = Math.floor((today - planStart) / DAY) + 1;
+  document.getElementById("subtitle").innerHTML =
+    `<span class="phase-chip">${esc(label)}${planWeek >= 1 && planWeek <= 8 ? ` · day ${day} of 56` : ""}</span>`;
+  document.getElementById("stamp").textContent = "Updated " + DATA.generated.replace("T", " ").slice(0, 16);
+  if (!DATA.live) {
+    const parts = [];
+    if (pending.length)
+      parts.push(`<b>${pending.length} ${pending.length === 1 ? "activity needs" : "activities need"} classifying</b> ` +
+                 `(<code>python3 nala.py review</code>)`);
+    if (DATA.circles_unanswered.length)
+      parts.push(`<b>${DATA.circles_unanswered.length} day(s) missing a circle answer</b> ` +
+                 `(<code>python3 nala.py sync</code> will ask)`);
+    if (parts.length) {
+      document.getElementById("banner").classList.add("show");
+      document.getElementById("bannerText").innerHTML = parts.join(" · ");
+    }
+  }
+}
+
+// ---- KPI tiles -------------------------------------------------------------
+{
+  const cur = weekStats(thisMonday), prev = weekStats(addDays(thisMonday, -7));
+  const daysSoFar = Math.min(7, Math.floor((today - thisMonday) / DAY) + 1);
+  const ph = phaseFor(planWeek);
+  const target = ph ? (ph.daily_min ? `${ph.daily_min[0]}–${ph.daily_min[1]} min/day` : "varies by day — see the weekly template") : "—";
+  const wl = DATA.weight.filter(e => !e.dog || e.dog === cfg.dog)
+    .sort((a, b) => a.date < b.date ? -1 : 1);
+  const w = wl[wl.length - 1] ?? { lb: cfg.weight_start_lb, date: cfg.plan_start + " (est.)" };
+  const dw = w.lb - cfg.weight_start_lb;
+  const [lo, hi] = cfg.weight_target_lb;
+  const miDelta = cur.mi - prev.mi;
+  const miDeltaTxt = miDelta === 0 ? "same as last week"
+    : `${miDelta > 0 ? "▲" : "▼"} ${Math.abs(miDelta).toFixed(1)} vs last week`;
+  const avgMin = daysSoFar ? Math.round(cur.min / daysSoFar) : 0;
+  const avgMi = daysSoFar ? cur.mi / daysSoFar : 0;
+  document.getElementById("kpis").innerHTML = `
+    <div class="tile"><div class="label">Days active</div>
+      <div class="value">${cur.days}<small> of 7</small></div></div>
+    <div class="tile"><div class="label">Time out this week</div>
+      <div class="value">${fmtTime(cur.min)}<small> · </small>${avgMin}<small> min/day</small></div>
+      <div class="meta">phase target ${target}</div></div>
+    <div class="tile"><div class="label">Miles this week</div>
+      <div class="value">${cur.mi.toFixed(1)}<small> mi · </small>${avgMi.toFixed(1)}<small>/day</small></div>
+      <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDeltaTxt}</div></div>
+    <div class="tile"><div class="label">Weight</div>
+      <div class="value">${w.lb.toFixed(1)}<small> lb</small></div>
+      ${dw !== 0 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
+      <div class="meta">target ${lo}–${hi} lb</div></div>`;
+}
+
+// ---- tooltip plumbing -------------------------------------------------------
+const tip = document.getElementById("tip");
+function bindTips(root) {
+  root.querySelectorAll("[data-tip]").forEach(el => {
+    const show = () => {
+      tip.innerHTML = el.dataset.tip; tip.style.display = "block";
+      const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+      let x = r.left + r.width / 2 - t.width / 2;
+      x = Math.max(8, Math.min(x, innerWidth - t.width - 8));
+      let y = r.top - t.height - 8;
+      if (y < 8) y = r.bottom + 8;
+      tip.style.left = x + "px"; tip.style.top = y + "px";
+    };
+    const hide = () => tip.style.display = "none";
+    el.addEventListener("mouseenter", show); el.addEventListener("mouseleave", hide);
+    el.addEventListener("focus", show);      el.addEventListener("blur", hide);
+    el.setAttribute("tabindex", "0");
+  });
+}
+function roundedTop(x, y, w, h, r) {
+  r = Math.min(r, h, w / 2);
+  return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+}
+
+// ---- this-week cumulative step chart -----------------------------------------
+{
+  const weekStart = thisMonday, weekEnd = addDays(thisMonday, 7);
+  const goal = cfg.weekly_miles_target[0], goalHi = cfg.weekly_miles_target[1];
+  const incs = [];
+  for (const a of pets) {
+    const dt = new Date(a.date);
+    if (dt >= weekStart && dt < weekEnd) incs.push({ t: +dt, mi: a.mi, label: a.name, run: isRun(a.type) });
+  }
+  for (const k of DATA.circles) {
+    const dt = new Date(k + "T08:00:00");
+    if (dt >= weekStart && dt < weekEnd) incs.push({ t: +dt, mi: cfg.circle.mi, label: "Circle (baseline walk)", run: false });
+  }
+  incs.sort((a, b) => a.t - b.t);
+  const total = incs.reduce((s, x) => s + x.mi, 0);
+
+  const W = 940, H = 240, L = 34, R = 14, T = 14, B = 26;
+  const plotW = W - L - R, plotH = H - T - B;
+  const x0 = +weekStart, x1 = +weekEnd;
+  const yMax = Math.max(10, Math.ceil(total + 0.5));
+  const X = t => L + plotW * (t - x0) / (x1 - x0);
+  const Y = v => T + plotH * (1 - v / yMax);
+  const nowClamp = Math.min(Date.now(), x1);
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:640px" role="img" aria-label="Cumulative miles this week">`;
+  for (let v = 0; v <= yMax; v += 2)
+    s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/>` +
+         `<text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  s += `<rect x="${L}" y="${Y(goalHi)}" width="${plotW}" height="${Y(goal) - Y(goalHi)}" fill="var(--band)"/>` +
+       `<text x="${L + 4}" y="${Y(goalHi) - 4}" text-anchor="start">weekly goal ${goal}–${goalHi} mi</text>`;
+  for (let i = 0; i < 7; i++) {
+    const dx = X(+addDays(weekStart, i));
+    const d = addDays(weekStart, i);
+    s += `<line x1="${dx}" x2="${dx}" y1="${T}" y2="${T + plotH}" stroke="var(--grid)"/>` +
+         `<text x="${X(+addDays(weekStart, i)) + plotW / 14}" y="${H - 8}" text-anchor="middle"` +
+         (localISO(d) === localISO(today) ? ' class="lbl" font-weight="600"' : "") +
+         `>${"Mon Tue Wed Thu Fri Sat Sun".split(" ")[i]}</text>`;
+  }
+
+  // build step path + collect vertices for hover dots
+  let cum = 0, path = `M ${X(x0)} ${Y(0)}`, cross = null;
+  const dots = [];
+  for (const inc of incs) {
+    const x = X(inc.t);
+    path += ` L ${x} ${Y(cum)}`;
+    const prev = cum; cum += inc.mi;
+    path += ` L ${x} ${Y(cum)}`;
+    if (!cross && prev < goal && cum >= goal) cross = { x, y: Y(goal) };
+    dots.push({ x, y: Y(cum), inc, running: cum });
+  }
+  path += ` L ${X(nowClamp)} ${Y(cum)}`;
+  s += `<path d="${path}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+  for (const d of dots) {
+    const t = `<b>${new Date(d.inc.t).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>` +
+              `${esc(d.inc.label)}<br>+${d.inc.mi.toFixed(2)} mi · running total ${d.running.toFixed(1)} mi`;
+    s += `<circle cx="${d.x}" cy="${d.y}" r="3.5" fill="var(--series)" stroke="var(--surface)" stroke-width="1.5" data-tip="${esc(t)}"/>`;
+  }
+  if (cross)
+    s += `<circle cx="${cross.x}" cy="${cross.y}" r="11" fill="var(--surface)" stroke="var(--good)" stroke-width="2"/>` +
+         `<path d="M ${cross.x - 5} ${cross.y} l 3.2 3.4 l 6 -7" fill="none" stroke="var(--good)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // current-standing end dot + label
+  if (incs.length) {
+    const ex = X(nowClamp), ey = Y(cum);
+    s += `<circle cx="${ex}" cy="${ey}" r="4.5" fill="var(--series)" stroke="var(--surface)" stroke-width="2"/>`;
+    const lx = Math.min(ex + 8, W - R - 44);
+    s += `<text x="${lx}" y="${ey - 8}" class="lbl" font-weight="600">${cum.toFixed(1)} mi</text>`;
+  }
+  s += `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--axis)"/></svg>`;
+  const el = document.getElementById("cumChart");
+  el.innerHTML = s; bindTips(el);
+  const remaining = Math.max(0, goal - total);
+  document.getElementById("cumSub").textContent =
+    total >= goal
+      ? `${total.toFixed(1)} mi so far — weekly goal met ✓`
+      : `${total.toFixed(1)} mi so far · ${remaining.toFixed(1)} mi to the ${goal} mi goal`;
+}
+
+// ---- weekly miles chart ------------------------------------------------------
+{
+  const N = 26;
+  const weeks = [];
+  for (let i = N - 1; i >= 0; i--) {
+    const mon = addDays(thisMonday, -i * 7);
+    weeks.push({ mon, ...weekStats(mon) });
+  }
+  const W = 940, H = 250, L = 34, R = 12, T = 14, B = 26;
+  const plotW = W - L - R, plotH = H - T - B;
+  const maxMi = Math.max(10, ...weeks.map(w => w.mi));
+  const yMax = Math.ceil(maxMi / 2) * 2;
+  const y = v => T + plotH * (1 - v / yMax);
+  const slot = plotW / N, barW = Math.min(24, slot - 2);
+  const [tLo, tHi] = cfg.weekly_miles_target;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:640px" role="img" aria-label="Weekly miles with the dogs">`;
+  for (let v = 0; v <= yMax; v += 2)
+    s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>` +
+         `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  s += `<rect x="${L}" y="${y(tHi)}" width="${plotW}" height="${y(tLo) - y(tHi)}" fill="var(--band)"/>` +
+       `<text x="${L + 4}" y="${y(tHi) - 4}" text-anchor="start">target ${tLo}–${tHi} mi</text>`;
+  let lastMonth = -1;
+  weeks.forEach((w, i) => {
+    const cx = L + slot * i + slot / 2;
+    const m = w.mon.getMonth();
+    if (m !== lastMonth) {
+      lastMonth = m;
+      s += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${w.mon.toLocaleDateString(undefined, { month: "short" })}</text>`;
+    }
+    if (w.mi > 0) {
+      const cur = +w.mon === +thisMonday;
+      const t = `<b>Week of ${fmtDay(w.mon)}${cur ? " (in progress)" : ""}</b>` +
+                `${w.mi.toFixed(1)} mi (${w.walkMi.toFixed(1)} walk/hike · ${w.runMi.toFixed(1)} run)` +
+                `<br>${fmtTime(w.min)} · ${w.days}/7 days`;
+      const x = cx - barW / 2, yTop = y(w.mi), yMid = y(w.walkMi), base = y(0);
+      s += `<g data-tip="${esc(t)}">`;
+      if (w.walkMi > 0)
+        s += w.runMi > 0.05
+          ? `<rect x="${x}" y="${yMid}" width="${barW}" height="${base - yMid}" fill="var(--series)"/>`
+          : `<path d="${roundedTop(x, yMid, barW, base - yMid, 4)}" fill="var(--series)"/>`;
+      if (w.runMi > 0.05) {
+        const segH = Math.max(1, (yMid - yTop) - (w.walkMi > 0 ? 2 : 0));  // 2px surface gap
+        s += `<path d="${roundedTop(x, yTop, barW, segH, 4)}" fill="var(--series-2)"/>`;
+      }
+      s += `</g>`;
+    }
+  });
+  s += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)" stroke-width="1"/></svg>`;
+  const el = document.getElementById("weeklyChart");
+  el.innerHTML = s; bindTips(el);
+  document.getElementById("weeklyLegend").innerHTML =
+    `<span class="sw" style="background:var(--series)"></span><span>Walk / hike</span>` +
+    `<span class="sw" style="background:var(--series-2)"></span><span>Run</span>`;
+  document.getElementById("weeklyTable").innerHTML =
+    `<table><tr><th>Week of</th><th class="num">Walk/hike mi</th><th class="num">Run mi</th><th class="num">Total</th><th class="num">Time</th><th class="num">Days out</th></tr>` +
+    weeks.filter(w => w.mi > 0 || +w.mon >= +planStart).map(w =>
+      `<tr><td>${fmtDay(w.mon)}</td><td class="num">${w.walkMi.toFixed(1)}</td><td class="num">${w.runMi.toFixed(1)}</td><td class="num">${w.mi.toFixed(1)}</td><td class="num">${fmtTime(w.min)}</td><td class="num">${w.days}/7</td></tr>`).join("") +
+    `</table>`;
+}
+
+// ---- daily-floor heatmap ------------------------------------------------------
+{
+  const preWeeks = 4;
+  const endWeek = Math.max(8, Math.min(planWeek, 12));
+  const rows = [];
+  for (let w = -preWeeks + 1; w <= endWeek; w++)
+    if (w !== 0) rows.push(w);          // w<=0 pre-plan, w>=1 plan weeks
+  const circUnans = new Set(DATA.circles_unanswered);
+  const cell = 26, gap = 2, top = 22, left = 44;
+  const Wd = left + 7 * (cell + gap) + 90, Hd = top + rows.length * (cell + gap) + 6;
+  const steps = [0, 15, 25, 35, 45, 60];
+  const rampFor = min => {
+    if (min <= 0) return null;
+    let i = 1;
+    while (i < steps.length && min >= steps[i]) i++;
+    return `var(--ramp-${i})`;
+  };
+  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="Daily minutes with ${cfg.dog}">`;
+  "MTWTFSS".split("").forEach((c, i) =>
+    s += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
+  rows.forEach((w, r) => {
+    const mon = addDays(planStart, (w > 0 ? w - 1 : w) * 7);
+    const yr = top + r * (cell + gap);
+    const label = w > 0 ? `W${w}` : fmtDay(mon);
+    s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}" ${w === planWeek ? 'font-weight="600"' : ""}>${label}</text>`;
+    const ph = phaseFor(Math.max(w, 1));
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(mon, i);
+      const k = localISO(d), rec = byDay[k];
+      const x = left + i * (cell + gap);
+      const future = d > today;
+      const unanswered = circUnans.has(k);
+      const fill = rec ? rampFor(rec.min) : null;
+      let attrs = "";
+      if (!future) {
+        const tgt = w > 0 && ph && ph.daily_min ? ` · target ${ph.daily_min[0]}–${ph.daily_min[1]} min` : "";
+        const t = rec
+          ? `<b>${fmtDay(d)}</b>${rec.min} min · ${rec.mi.toFixed(1)} mi${tgt}<br>${esc(rec.names.join(", "))}`
+          : `<b>${fmtDay(d)}</b>${unanswered ? "circle not recorded yet — sync will ask" : "no outing logged"}${tgt}`;
+        attrs = ` data-tip="${esc(t)}"`;
+      }
+      s += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4"` +
+           ` fill="${fill ?? "var(--surface)"}"` +
+           ` stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}"` +
+           ` stroke-width="${+d === +today ? 1.5 : 1}"` +
+           (future ? ' opacity="0.35"' : "") + attrs + `/>`;
+      if (unanswered && !rec && !future)
+        s += `<text x="${x + cell / 2}" y="${yr + cell / 2 + 4}" text-anchor="middle" pointer-events="none">?</text>`;
+    }
+    if (w === 1) s += `<text x="${left + 7 * (cell + gap) + 8}" y="${yr + cell / 2 + 4}" class="lbl">plan start</text>`;
+  });
+  s += `</svg>`;
+  const el = document.getElementById("heatmap");
+  el.innerHTML = s; bindTips(el);
+  document.getElementById("heatLegend").innerHTML =
+    `<span>minutes:</span><span class="sw" style="background:var(--surface)"></span><span>0</span>` +
+    steps.slice(1).map((v, i) => `<span class="sw" style="background:var(--ramp-${i + 1})"></span><span>${v}${i === steps.length - 2 ? "+" : ""}</span>`).join("");
+  const days = Object.keys(byDay).sort().reverse().slice(0, 21);
+  document.getElementById("heatTable").innerHTML =
+    `<table><tr><th>Date</th><th class="num">Minutes</th><th class="num">Miles</th><th>Outings</th></tr>` +
+    days.map(k => `<tr><td>${k}</td><td class="num">${byDay[k].min}</td><td class="num">${byDay[k].mi.toFixed(1)}</td><td>${esc(byDay[k].names.join(", "))}</td></tr>`).join("") +
+    `</table>`;
+}
+
+// ---- weight charts --------------------------------------------------------------
+{
+  const all = DATA.weight.slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  const entries = all.filter(e => !e.dog || e.dog === cfg.dog);
+  const others = (cfg.other_dogs || [])
+    .map(name => ({ name, pts: all.filter(e => e.dog === name) }))
+    .filter(s => s.pts.length);
+  const [lo, hi] = cfg.weight_target_lb;
+  const T0 = d => +new Date(d + "T00:00:00");
+
+  function drawWeight(elId, seriesList, x0, x1, ticks, bands) {
+    const W = 460, H = 240, L = 36, R = 14, T = 12, B = 26;
+    const plotW = W - L - R, plotH = H - T - B;
+    const lbs = seriesList.flatMap(s => s.pts.map(e => e.lb));
+    const yLo = Math.min(...bands.map(b => b.lo - 2), ...lbs) - 1;
+    const yHi = Math.max(cfg.weight_start_lb, ...lbs) + 1.5;
+    const step = yHi - yLo > 18 ? 4 : 2;
+    const X = t => L + plotW * (t - x0) / (x1 - x0);
+    const Y = v => T + plotH * (1 - (v - yLo) / (yHi - yLo));
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:320px" role="img" aria-label="Weight log">`;
+    for (let v = Math.ceil(yLo / step) * step; v <= yHi; v += step)
+      s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/>` +
+           `<text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+    for (const b of bands)
+      s += `<rect x="${L}" y="${Y(b.hi)}" width="${plotW}" height="${Y(b.lo) - Y(b.hi)}" fill="var(--band)"/>` +
+           `<text x="${b.left ? L + 4 : W - R - 4}" y="${b.below ? Y(b.lo) + 13 : Y(b.hi) - 4}"` +
+           ` text-anchor="${b.left ? "start" : "end"}">${b.label}</text>`;
+    for (const tk of ticks) {
+      const xx = X(tk.t);
+      if (xx < L || xx > W - R) continue;
+      if (tk.line) s += `<line x1="${xx}" x2="${xx}" y1="${T}" y2="${T + plotH}" stroke="var(--axis)"/>`;
+      s += `<text x="${xx}" y="${H - 8}" text-anchor="middle">${tk.label}</text>`;
+    }
+    for (const ser of seriesList) {
+      const color = dogColor(ser.name);
+      if (ser.pts.length > 1)
+        s += `<path d="M` + ser.pts.map(e => `${X(T0(e.date))},${Y(e.lb)}`).join(" L") +
+             `" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+      for (const e of ser.pts) {
+        const who = seriesList.length > 1 ? `${ser.name} · ` : "";
+        const t = `<b>${who}${e.date}</b>${e.lb.toFixed(1)} lb${e.note ? "<br>" + esc(e.note) : ""}`;
+        s += `<circle cx="${X(T0(e.date))}" cy="${Y(e.lb)}" r="4.5" fill="${color}"` +
+             ` stroke="var(--surface)" stroke-width="2" data-tip="${esc(t)}"/>`;
+      }
+    }
+    s += `<line x1="${L}" x2="${W - R}" y1="${T + plotH}" y2="${T + plotH}" stroke="var(--axis)"/></svg>`;
+    const el = document.getElementById(elId);
+    el.innerHTML = s; bindTips(el);
+  }
+
+  // plan window: a week before start through week 17
+  document.getElementById("weightSub").textContent =
+    `Re-weigh every 2–4 weeks · milestones at week 8 (${fmtDay(addDays(planStart, 56))}) and week 16`;
+  const px0 = +addDays(planStart, -7), px1 = +addDays(planStart, 17 * 7);
+  drawWeight("weightChart", [{ name: cfg.dog, pts: entries.filter(e => T0(e.date) >= px0) }],
+             px0, px1, [
+    { t: +planStart, label: "start" },
+    { t: +addDays(planStart, 56), label: "wk 8", line: true },
+    { t: +addDays(planStart, 112), label: "wk 16", line: true },
+  ], [{ lo, hi, left: true, label: `target ${lo}–${hi} lb` }]);
+
+  // history window: everything known, padded; year ticks (or months if short)
+  let hx0 = Math.min(...all.map(e => T0(e.date)));
+  const hx1 = +addDays(today, 30);
+  hx0 -= Math.max((hx1 - hx0) * 0.05, 15 * DAY);
+  const hTicks = [];
+  const d0 = new Date(hx0), d1 = new Date(hx1);
+  if (hx1 - hx0 > 400 * DAY) {
+    for (let y = d0.getFullYear() + 1; y <= d1.getFullYear(); y++)
+      hTicks.push({ t: +new Date(y, 0, 1), label: String(y) });
+  } else {
+    for (let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m <= d1; m.setMonth(m.getMonth() + 2))
+      hTicks.push({ t: +m, label: m.toLocaleDateString(undefined, { month: "short" }) });
+  }
+  const histSeries = [{ name: cfg.dog, pts: entries }, ...others];
+  const histBands = [{ lo, hi, below: true,
+                       label: others.length ? `${cfg.dog} target ${lo}–${hi} lb` : `target ${lo}–${hi} lb` }];
+  for (const ser of others) {
+    const t = (cfg.other_dog_targets_lb || {})[ser.name];
+    if (t) histBands.push({ lo: t[0], hi: t[1], below: true, label: `${esc(ser.name)} target ${t[0]}–${t[1]} lb` });
+  }
+  drawWeight("weightHist", histSeries, hx0, hx1, hTicks, histBands);
+  if (others.length)
+    document.getElementById("weightLegend").innerHTML = histSeries.map(ser =>
+      `<span class="sw" style="background:${dogColor(ser.name)}"></span><span>${esc(ser.name)}</span>`).join("");
+
+  document.getElementById("weightTable").innerHTML =
+    `<table><tr><th>Date</th>${others.length ? "<th>Dog</th>" : ""}<th class="num">lb</th><th>Note</th></tr>` +
+    all.map(e => `<tr><td>${e.date}</td>${others.length ? `<td>${esc(e.dog ?? cfg.dog)}</td>` : ""}` +
+                 `<td class="num">${e.lb.toFixed(1)}</td><td>${esc(e.note ?? "")}</td></tr>`).join("") +
+    `</table>` +
+    `<div class="sub" style="margin-top:6px">Log with <code>python3 nala.py weight 53.5</code>` +
+    (others.length ? ` <code>--dog ${esc(others[0].name)}</code>` : "") + `</div>`;
+}
+
+// ---- phases ----------------------------------------------------------------------
+document.getElementById("phases").innerHTML = cfg.phases.map(p => {
+  const done = p.weeks[1] != null && planWeek > p.weeks[1];
+  const now = phaseFor(planWeek) === p;
+  const range = p.weeks[1] == null ? `Week ${p.weeks[0]}+` : `Weeks ${p.weeks[0]}–${p.weeks[1]}`;
+  return `<li class="${now ? "now" : done ? "done" : ""}">` +
+         `<div class="ph-t">${range} — ${esc(p.title)}</div>` +
+         `<div class="ph-n">${p.daily_min ? `${p.daily_min[0]}–${p.daily_min[1]} min daily · ` : ""}${esc(p.notes)}</div></li>`;
+}).join("");
+
+// ---- recent outings ---------------------------------------------------------------
+{
+  const rows = pets.slice(-15).reverse();
+  document.getElementById("recentSub").textContent =
+    `${pets.length} logged since ${pets.length ? pets[0].date.slice(0, 10) : "—"}`;
+  document.getElementById("recent").innerHTML =
+    `<table><tr><th>Date</th><th>Activity</th><th>Type</th><th class="num">Time</th><th class="num">Miles</th></tr>` +
+    rows.map(a => `<tr><td>${a.date.slice(0, 10)}</td>` +
+                  `<td><a href="https://www.strava.com/activities/${a.id}" target="_blank" rel="noopener">${esc(a.name)}</a></td><td>${esc(a.type)}</td>` +
+                  `<td class="num">${fmtTime(a.min)}</td><td class="num">${a.mi.toFixed(1)}</td></tr>`).join("") +
+    `</table>`;
+}
+
+// ---- feeding ----------------------------------------------------------------------
+if (cfg.feeding && Object.keys(cfg.feeding).length) {
+  document.getElementById("feedCard").style.display = "";
+  const frac = c => ({ "0.25": "¼", "0.33": "⅓", "0.50": "½", "0.67": "⅔", "0.75": "¾" })[c.toFixed(2)] || c;
+  document.getElementById("feeding").innerHTML =
+    Object.entries(cfg.feeding).map(([dog, items]) => {
+      const kcal = items.reduce((t, it) =>
+        t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
+      const rows = items.map(it => {
+        const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
+        const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup`
+                  : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
+        return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""}` +
+               ` <span class="d">(${per})</span></li>`;
+      }).join("");
+      return `<div style="min-width:280px; flex:1">
+        <div style="margin-bottom:6px"><span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>
+          <span class="sub">${Math.round(kcal)} kcal/day</span></div>
+        <ul class="notes">${rows}</ul></div>`;
+    }).join("");
+}
+
+// ---- notes ------------------------------------------------------------------------
+if (DATA.notes.length) {
+  document.getElementById("notesCard").style.display = "";
+  document.getElementById("notes").innerHTML = DATA.notes.slice().reverse().map(n => {
+    const dog = n.dog || cfg.dog;
+    return `<li><span class="d">${n.date}</span>` +
+           `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>${esc(n.text)}</li>`;
+  }).join("");
+}
+
+// ---- live mode (served by `nala.py serve`) ----------------------------------------
+if (DATA.live) {
+  const toast = document.getElementById("toast");
+  const flash = (msg, ms = 2200) => {
+    toast.textContent = msg; toast.style.display = "block";
+    clearTimeout(flash._t); flash._t = setTimeout(() => toast.style.display = "none", ms);
+  };
+  const post = async (path, body) => {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(body || {}) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    return j;
+  };
+
+  document.getElementById("toolbar").classList.add("show");
+
+  const syncBtn = document.getElementById("syncBtn");
+  syncBtn.onclick = async () => {
+    syncBtn.disabled = true; syncBtn.textContent = "Syncing…";
+    try {
+      const r = await post("/api/sync");
+      const acts = r.activities || [], circles = r.circles || [];
+      const asks = acts.filter(a => a.pet === null).length + circles.length;
+      if (!asks) {
+        flash(r.new ? `${r.new} new outing(s) pulled — reloading…` : "Up to date — reloading…");
+        setTimeout(() => location.reload(), 700);
+        return;
+      }
+      showReview(`Sync: ${r.new} new outing(s), ${asks} to answer`,
+                 acts.map(activityRow).concat(circles.map(circleRow)));
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      syncBtn.disabled = false; syncBtn.textContent = "↻ Sync now";
+    } catch (e) {
+      flash("Sync failed: " + e.message, 4000);
+      syncBtn.disabled = false; syncBtn.textContent = "↻ Sync now";
+    }
+  };
+
+  const wBtn = document.getElementById("wBtn"), wIn = document.getElementById("wIn");
+  const wDog = document.getElementById("wDog");
+  wDog.innerHTML = [cfg.dog, ...(cfg.other_dogs || [])]
+    .map(d => `<option>${esc(d)}</option>`).join("");
+  wBtn.onclick = async () => {
+    const lb = parseFloat(wIn.value);
+    if (!lb) return flash("Enter a weight first");
+    try { await post("/api/weight", { lb, dog: wDog.value });
+          flash(`Logged ${esc(wDog.value)} at ${lb} lb — reloading…`);
+          setTimeout(() => location.reload(), 700); }
+    catch (e) { flash("Failed: " + e.message, 4000); }
+  };
+
+  const nBtn = document.getElementById("nBtn"), nIn = document.getElementById("nIn");
+  const nDog = document.getElementById("nDog");
+  nDog.innerHTML = wDog.innerHTML;
+  nBtn.onclick = async () => {
+    const text = nIn.value.trim();
+    if (!text) return flash("Type a note first");
+    try { await post("/api/note", { text, dog: nDog.value });
+          flash(`${esc(nDog.value)} note added — reloading…`);
+          setTimeout(() => location.reload(), 700); }
+    catch (e) { flash("Failed: " + e.message, 4000); }
+  };
+
+  // review rows: activity classification + circle-day questions.
+  // Circle rows are only ever rendered from sync results — the card at page
+  // load holds nothing but activities still awaiting a with/without answer.
+  const card = document.getElementById("reviewCard");
+  const list = document.getElementById("reviewList");
+  const fmtISO = k => new Date(k + "T00:00:00").toLocaleDateString(undefined,
+    { weekday: "short", month: "short", day: "numeric" });
+  const todayISO = localISO(today);
+
+  const activityRow = (a) => {
+    const far = a.latlng && cfg.home_latlng
+      ? Math.hypot((a.latlng[0] - cfg.home_latlng[0]) * 69,
+                   (a.latlng[1] - cfg.home_latlng[1]) * 69 * Math.cos(cfg.home_latlng[0] * Math.PI / 180)) : 0;
+    const flag = far > (cfg.home_radius_mi || 15) ? ` <span class="flag">⚑ ~${Math.round(far)} mi from home</span>` : "";
+    const info = `<div class="info"><span class="d">${a.date.slice(0, 10)}</span>${esc(a.name)}
+        <span class="d"> · ${esc(a.type)} · ${a.min} min · ${a.mi.toFixed(1)} mi</span>${flag}</div>`;
+    if (a.pet !== null && a.pet !== undefined)
+      return `<div class="review-item">${info}
+        <div class="acts"><span class="d">${a.pet ? `with ${esc(cfg.dog)}` : `not ${esc(cfg.dog)}`}</span></div></div>`;
+    return `<div class="review-item" data-kind="activity" data-id="${a.id}">${info}
+      <div class="acts"><button class="btn yes">With ${esc(cfg.dog)}</button>
+        <button class="btn no">Not ${esc(cfg.dog)}</button></div></div>`;
+  };
+
+  const circleRow = (k) => {
+    const isToday = k === todayISO;
+    const q = isToday ? "Has she done the circle today?" : "Did she do the circle?";
+    return `<div class="review-item" data-kind="circle" data-date="${k}">
+      <div class="info"><span class="d">${isToday ? "Today" : fmtISO(k)}</span>${q}</div>
+      <div class="acts"><button class="btn yes">Yes, circle</button>
+        <button class="btn no">${isToday ? "Not today" : "No circle"}</button></div></div>`;
+  };
+
+  const showReview = (title, rows) => {
+    document.getElementById("reviewTitle").textContent = title;
+    list.innerHTML = rows.join("");
+    card.style.display = "";
+    list.querySelectorAll(".review-item[data-kind]").forEach(item => {
+      const [yes, no] = item.querySelectorAll("button");
+      const handle = async (value) => {
+        yes.disabled = no.disabled = true;
+        try {
+          if (item.dataset.kind === "activity")
+            await post("/api/classify", { id: item.dataset.id, value });
+          else
+            await post("/api/circle", { date: item.dataset.date, value });
+          item.style.opacity = "0.4";
+          if (![...list.querySelectorAll(".review-item[data-kind]")].some(i => i.style.opacity !== "0.4"))
+            { flash("All confirmed — reloading…"); setTimeout(() => location.reload(), 700); }
+        } catch (e) { flash("Failed: " + e.message, 4000); yes.disabled = no.disabled = false; }
+      };
+      yes.onclick = () => handle(true);
+      no.onclick = () => handle(false);
+    });
+  };
+
+  const unc = DATA.unclassified || [];
+  if (unc.length)
+    showReview(`Needs your confirmation (${unc.length})`, unc.map(activityRow));
+}
+</script>

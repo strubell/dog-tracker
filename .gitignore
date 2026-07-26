@@ -1,0 +1,19 @@
+# Local data — never leaves this machine (contains Strava OAuth tokens,
+# activity/weight/note logs). Copy the data/ dir over by hand (e.g. scp).
+/data/
+
+# Personal config: home coordinates, away dates, real feeding/targets.
+# Start from config.example.json instead; keep your real config.json local.
+/config.json
+
+# Generated build artifact — embeds all data plus the base64 photo.
+/dashboard.html
+
+# Personal media
+/assets/*.jpg
+/assets/*.jpeg
+/assets/*.png
+
+# Python
+__pycache__/
+*.pyc

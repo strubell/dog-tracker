@@ -1,0 +1,151 @@
+{
+  "dog": "Nala",
+  "other_dogs": [
+    "Pepper"
+  ],
+  "other_dog_targets_lb": {
+    "Pepper": [
+      38,
+      40
+    ]
+  },
+  "dog_colors": {
+    "Nala": "#0ca4b8",
+    "Pepper": "#d9534f"
+  },
+  "feeding": {
+    "Nala": [
+      {
+        "item": "Taste of the Wild Ancient Stream",
+        "cups": 0.667,
+        "kcal_per_cup": 413,
+        "per_day": 2,
+        "when": "AM & PM"
+      },
+      {
+        "item": "ProDen PlaqueOff Vegetable Fusion dental bone",
+        "kcal": 107,
+        "when": "daily"
+      },
+      {
+        "item": "Pill Buddy Naturals",
+        "kcal": 14,
+        "per_day": 2,
+        "when": "daily"
+      }
+    ],
+    "Pepper": [
+      {
+        "item": "Taste of the Wild Ancient Mountain",
+        "cups": 0.667,
+        "kcal_per_cup": 411,
+        "per_day": 2,
+        "when": "AM & PM"
+      },
+      {
+        "item": "ProDen PlaqueOff Vegetable Fusion dental bone",
+        "kcal": 107,
+        "when": "daily"
+      }
+    ]
+  },
+  "timezone": "America/New_York",
+  "plan_start": "2026-07-13",
+  "weight_start_lb": 58.5,
+  "weight_target_lb": [
+    46,
+    48
+  ],
+  "weekly_miles_target": [
+    6,
+    7
+  ],
+  "keywords": [
+    "nala",
+    "🐾",
+    "with pet",
+    "w/ pet"
+  ],
+  "home_latlng": [
+    0.0,
+    0.0
+  ],
+  "home_radius_mi": 15,
+  "circle": {
+    "mi": 0.44,
+    "min": 12,
+    "since": "2026-01-01",
+    "away": []
+  },
+  "auto_no_types": [
+    "WeightTraining",
+    "Weight Training",
+    "Workout",
+    "Yoga",
+    "RockClimbing",
+    "Rock Climb",
+    "VirtualRide",
+    "VirtualRun",
+    "Ride",
+    "EBikeRide"
+  ],
+  "phases": [
+    {
+      "weeks": [
+        1,
+        2
+      ],
+      "title": "Rebuild the daily floor",
+      "daily_min": [
+        20,
+        30
+      ],
+      "notes": "Every day, flat-ish, soft footing. 7 days a week beats distance."
+    },
+    {
+      "weeks": [
+        3,
+        4
+      ],
+      "title": "Extend the base",
+      "daily_min": [
+        30,
+        40
+      ],
+      "notes": "Gentle terrain variety. Optional one ~45 min weekend outing."
+    },
+    {
+      "weeks": [
+        5,
+        6
+      ],
+      "title": "Add a little structure",
+      "daily_min": [
+        35,
+        45
+      ],
+      "notes": "One ~60 min adventure day. One easy jog together, 20–25 min."
+    },
+    {
+      "weeks": [
+        7,
+        8
+      ],
+      "title": "Back to her old rhythm",
+      "daily_min": [
+        40,
+        45
+      ],
+      "notes": "One 60–75 min hike — only if the vet has cleared her joints. Keep the one easy jog together."
+    },
+    {
+      "weeks": [
+        9,
+        null
+      ],
+      "title": "Maintenance",
+      "daily_min": null,
+      "notes": "Mon/Fri/Sun easy 30–40 · Tue/Thu hike 40–45 · Wed easy jog 20–25 · Sat adventure 60–75 · ~8–9 mi/week"
+    }
+  ]
+}
