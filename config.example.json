@@ -93,19 +93,19 @@
     {
       "weeks": [
         1,
-        2
+        3
       ],
       "title": "Rebuild the daily floor",
       "daily_min": [
         20,
         30
       ],
-      "notes": "Every day, flat-ish, soft footing. 7 days a week beats distance."
+      "notes": "Every day, flat-ish, soft footing. 7 days a week beats distance. (Week 3 repeats week 2 — easing the ramp.)"
     },
     {
       "weeks": [
-        3,
-        4
+        4,
+        5
       ],
       "title": "Extend the base",
       "daily_min": [
@@ -116,8 +116,8 @@
     },
     {
       "weeks": [
-        5,
-        6
+        6,
+        7
       ],
       "title": "Add a little structure",
       "daily_min": [
@@ -128,8 +128,8 @@
     },
     {
       "weeks": [
-        7,
-        8
+        8,
+        9
       ],
       "title": "Back to her old rhythm",
       "daily_min": [
@@ -140,7 +140,7 @@
     },
     {
       "weeks": [
-        9,
+        10,
         null
       ],
       "title": "Maintenance",

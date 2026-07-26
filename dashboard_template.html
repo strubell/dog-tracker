@@ -209,7 +209,7 @@
       <details class="tv"><summary>Table view</summary><div id="heatTable"></div></details>
     </div>
     <div class="card">
-      <h2>The 8-week plan</h2>
+      <h2 id="planHeading">The plan</h2>
       <div class="sub">Advance only after a no-joint-signs week; repeat the week otherwise</div>
       <ol class="phases" id="phases"></ol>
     </div>
@@ -279,6 +279,10 @@ function addDays(d, n) {
 }
 const thisMonday = mondayOf(today);
 const planWeek = Math.floor((today - planStart) / WEEK) + 1;
+// length of the structured plan = last bounded phase's end week (derived from
+// config, so adding/repeating a week just works)
+const planWeeks = Math.max(...cfg.phases.filter(p => p.weeks[1] != null).map(p => p.weeks[1]));
+const planDays = planWeeks * 7;
 const iso = d => d.toISOString().slice(0, 10);
 const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const fmtDay = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -322,7 +326,7 @@ function weekStats(monday) {
     : `Week ${planWeek}` + (ph ? ` · ${ph.title}` : "");
   const day = Math.floor((today - planStart) / DAY) + 1;
   document.getElementById("subtitle").innerHTML =
-    `<span class="phase-chip">${esc(label)}${planWeek >= 1 && planWeek <= 8 ? ` · day ${day} of 56` : ""}</span>`;
+    `<span class="phase-chip">${esc(label)}${planWeek >= 1 && planWeek <= planWeeks ? ` · day ${day} of ${planDays}` : ""}</span>`;
   document.getElementById("stamp").textContent = "Updated " + DATA.generated.replace("T", " ").slice(0, 16);
   if (!DATA.live) {
     const parts = [];
@@ -535,7 +539,7 @@ function roundedTop(x, y, w, h, r) {
 // ---- daily-floor heatmap ------------------------------------------------------
 {
   const preWeeks = 4;
-  const endWeek = Math.max(8, Math.min(planWeek, 12));
+  const endWeek = Math.max(planWeeks, Math.min(planWeek, planWeeks + 4));
   const rows = [];
   for (let w = -preWeeks + 1; w <= endWeek; w++)
     if (w !== 0) rows.push(w);          // w<=0 pre-plan, w>=1 plan weeks
@@ -646,15 +650,17 @@ function roundedTop(x, y, w, h, r) {
     el.innerHTML = s; bindTips(el);
   }
 
-  // plan window: a week before start through week 17
+  // plan window: a week before start through a week past the 2nd milestone.
+  // Milestones: end of the structured plan (planWeeks) and +8 weeks after.
+  const mile1 = planWeeks, mile2 = planWeeks + 8;
   document.getElementById("weightSub").textContent =
-    `Re-weigh every 2–4 weeks · milestones at week 8 (${fmtDay(addDays(planStart, 56))}) and week 16`;
-  const px0 = +addDays(planStart, -7), px1 = +addDays(planStart, 17 * 7);
+    `Re-weigh every 2–4 weeks · milestones at week ${mile1} (${fmtDay(addDays(planStart, mile1 * 7))}) and week ${mile2}`;
+  const px0 = +addDays(planStart, -7), px1 = +addDays(planStart, (mile2 + 1) * 7);
   drawWeight("weightChart", [{ name: cfg.dog, pts: entries.filter(e => T0(e.date) >= px0) }],
              px0, px1, [
     { t: +planStart, label: "start" },
-    { t: +addDays(planStart, 56), label: "wk 8", line: true },
-    { t: +addDays(planStart, 112), label: "wk 16", line: true },
+    { t: +addDays(planStart, mile1 * 7), label: `wk ${mile1}`, line: true },
+    { t: +addDays(planStart, mile2 * 7), label: `wk ${mile2}`, line: true },
   ], [{ lo, hi, left: true, label: `target ${lo}–${hi} lb` }]);
 
   // history window: everything known, padded; year ticks (or months if short)
@@ -692,6 +698,7 @@ function roundedTop(x, y, w, h, r) {
 }
 
 // ---- phases ----------------------------------------------------------------------
+document.getElementById("planHeading").textContent = `The ${planWeeks}-week plan`;
 document.getElementById("phases").innerHTML = cfg.phases.map(p => {
   const done = p.weeks[1] != null && planWeek > p.weeks[1];
   const now = phaseFor(planWeek) === p;
