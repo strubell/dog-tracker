@@ -40,11 +40,18 @@ python3 nala.py serve           # interactive dashboard with buttons (recommende
 # — or the terminal workflow —
 python3 nala.py sync            # pull new activities, confirm any unknowns, rebuild
 open dashboard.html             # look at it
-python3 nala.py weight 53.5     # log a weigh-in (every 2–4 weeks)
-python3 nala.py note "hesitated on stairs after the long hike"
+python3 nala.py weight 53.5 --dog Pepper   # log a weigh-in (--dog optional)
+python3 nala.py note "hesitated on stairs" --dog Nala
+python3 nala.py meal --dog Pepper --breakfast no --dinner yes --other "broth"
 python3 nala.py review          # classify anything sync left pending
-python3 nala.py mark <id> yes   # fix a single activity by ID
+python3 nala.py mark <id> yes --dog Pepper   # fix one dog on one activity
+python3 nala.py circle yes --dog Nala        # record the circle per dog
 ```
+
+The dashboard has a tab per dog. Nala's page is activity-focused (plan,
+daily floor, weekly miles); Pepper's swaps those for an eating chart (meals
+eaten per day, ◆ for anything different/new). Each outing and circle is
+confirmed per dog, so their numbers are independent.
 
 `sync --batch` never prompts (for cron); unknowns wait in `review` and show as
 a banner on the dashboard.
@@ -97,6 +104,8 @@ the rest of your data still comes from the copied `data/`).
 - `config.json` — plan start date, phase targets, weight targets, feeding,
   home location, detection keywords. **Git-ignored** (personal); start from
   `config.example.json`. Edit freely; `build` re-renders from it.
-- `data/activities.json` — the activity log (`pet: true/false/null`).
-- `data/weight.json`, `data/notes.json` — your manual logs.
+- `data/activities.json` — the activity log; each has a per-dog `dogs` map
+  (plus a derived `pet` flag).
+- `data/weight.json`, `data/notes.json`, `data/meals.json` — your manual logs
+  (weight/notes/meals carry an optional `dog`; absent means the primary dog).
 - `dashboard_template.html` → `dashboard.html` — template and rendered output.

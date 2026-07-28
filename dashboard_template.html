@@ -81,6 +81,11 @@
                    border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
   .toolbar .grp { display: flex; gap: 6px; align-items: center; }
   .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
+  .tabs { display: flex; gap: 8px; margin: 18px 0 8px; }
+  .tab { font: inherit; font-size: 15px; font-weight: 700; padding: 8px 20px; border-radius: 999px;
+         border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); cursor: pointer; }
+  .tab:hover { background: var(--band); }
+  .tab.active { color: #fff; border-color: transparent; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
            background: var(--ink); color: var(--page); padding: 9px 16px; border-radius: 8px;
            font-size: 14px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
@@ -157,14 +162,15 @@
 <div class="page">
   <header>
     <div class="hrow">
-      <img id="pup" class="pup" src="__PHOTO__" alt="Nala">
+      <img id="pup" class="pup" src="__PHOTO__" alt="Nala" data-page="Nala">
       <div>
-        <h1>Nala's Comeback Plan</h1>
-        <div class="sub" id="subtitle"></div>
+        <h1 id="pageTitle">Nala's Comeback Plan</h1>
+        <div class="sub" id="subtitle" data-page="Nala"></div>
         <div class="stamp" id="stamp"></div>
       </div>
     </div>
-    <div class="banner" id="banner"><span class="dot">⚠︎</span><span id="bannerText"></span></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="banner" id="banner" data-page="Nala"><span class="dot">⚠︎</span><span id="bannerText"></span></div>
     <div class="toolbar" id="toolbar">
       <button class="btn primary" id="syncBtn">↻ Sync now</button>
       <div class="sep"></div>
@@ -178,21 +184,31 @@
     </div>
   </header>
 
-  <div class="card" id="reviewCard" style="display:none">
+  <div class="card cond" id="reviewCard" data-page="Nala" style="display:none">
     <h2 id="reviewTitle"></h2>
-    <div class="sub">Strava's API doesn't share the “with pet” tag, so confirm these here</div>
+    <div class="sub">Strava's API doesn't share the “with pet” tag, so confirm each dog here</div>
     <div id="reviewList"></div>
   </div>
 
-  <div class="kpis" id="kpis"></div>
+  <div class="kpis" id="kpis" data-page="Nala"></div>
+  <div class="kpis" id="kpisPepper" data-page="Pepper"></div>
 
-  <div class="card">
+  <div class="card" id="eatingCard" data-page="Pepper">
+    <h2>Eating</h2>
+    <div class="sub">Meals eaten each day (0/1/2) since plan start · ◆ = something different/new</div>
+    <div class="scroll" id="eatmap"></div>
+    <div class="legend" id="eatLegend"></div>
+    <div class="grp" id="mealLog" style="display:none; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center"></div>
+    <details class="tv"><summary>Table view</summary><div id="eatTable"></div></details>
+  </div>
+
+  <div class="card" data-page="Nala">
     <h2>This week's progress</h2>
     <div class="sub" id="cumSub"></div>
     <div class="scroll" id="cumChart"></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-page="Nala">
     <h2>Weekly miles with the dogs</h2>
     <div class="sub">Logged outings, including daily “circle”</div>
     <div class="scroll" id="weeklyChart"></div>
@@ -200,7 +216,7 @@
     <details class="tv"><summary>Table view</summary><div id="weeklyTable"></div></details>
   </div>
 
-  <div class="duo" style="margin-bottom:16px">
+  <div class="duo" data-page="Nala" style="margin-bottom:16px">
     <div class="card">
       <h2>Daily activity</h2>
       <div class="sub">Minutes out with her each day, circles included</div>
@@ -216,35 +232,35 @@
   </div>
 
   <div class="duo" style="margin-bottom:16px">
-    <div class="card">
+    <div class="card" data-page="Nala Pepper">
       <h2>Weight history</h2>
       <div class="sub">All known weigh-ins</div>
       <div class="legend" id="weightLegend"></div>
       <div class="scroll" id="weightHist"></div>
       <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
     </div>
-    <div class="card">
+    <div class="card" data-page="Nala">
       <h2>Plan progress</h2>
       <div class="sub" id="weightSub"></div>
       <div class="scroll" id="weightChart"></div>
     </div>
   </div>
 
-  <div class="card" id="feedCard" style="display:none">
+  <div class="card cond" id="feedCard" data-page="Nala Pepper" style="display:none">
     <h2>Feeding</h2>
     <div class="sub">Current daily rations</div>
     <div id="feeding" style="display:flex; gap:28px; flex-wrap:wrap"></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-page="Nala">
     <h2>Recent outings with the dogs</h2>
     <div class="sub" id="recentSub"></div>
     <div class="scroll" id="recent"></div>
   </div>
 
-  <div class="card" id="notesCard" style="display:none">
+  <div class="card cond" id="notesCard" data-page="Nala Pepper" style="display:none">
     <h2>Notes</h2>
-    <div class="sub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
+    <div class="sub" id="notesSub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
     <ul class="notes" id="notes"></ul>
   </div>
 </div>
@@ -261,7 +277,10 @@ const dogColor = name =>
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 const DAY = 86400000, WEEK = 7 * DAY;
-const pets = DATA.activities.filter(a => a.pet === true)
+const dogList = DATA.dogs || [cfg.dog, ...(cfg.other_dogs || [])];
+const dogsOf = a => a.dogs || { [cfg.dog]: a.pet };   // fallback for un-migrated
+// activity charts are Nala's: outings she was on
+const pets = DATA.activities.filter(a => dogsOf(a)[cfg.dog] === true)
                             .sort((a, b) => a.date < b.date ? -1 : 1);
 const pending = DATA.activities.filter(a => a.pet === null);
 const planStart = new Date(cfg.plan_start + "T00:00:00");
@@ -743,15 +762,139 @@ if (cfg.feeding && Object.keys(cfg.feeding).length) {
     }).join("");
 }
 
-// ---- notes ------------------------------------------------------------------------
-if (DATA.notes.length) {
-  document.getElementById("notesCard").style.display = "";
-  document.getElementById("notes").innerHTML = DATA.notes.slice().reverse().map(n => {
-    const dog = n.dog || cfg.dog;
-    return `<li><span class="d">${n.date}</span>` +
-           `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>${esc(n.text)}</li>`;
-  }).join("");
+// ---- notes (filtered to the active dog) -------------------------------------------
+function renderNotes(dog) {
+  const card = document.getElementById("notesCard");
+  const mine = DATA.notes.filter(n => (n.dog || cfg.dog) === dog);
+  card.style.display = (card.dataset.onpage !== "0" && mine.length) ? "" : "none";
+  document.getElementById("notesSub").textContent = dog === cfg.dog
+    ? "Stairs hesitation, paw-licking, stiffness, hunger strikes, etc."
+    : "Appetite, gut, and anything else notable";
+  document.getElementById("notes").innerHTML = mine.slice().reverse().map(n =>
+    `<li><span class="d">${n.date}</span>` +
+    `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>${esc(n.text)}</li>`).join("");
 }
+
+// ---- Pepper: eating ---------------------------------------------------------------
+// meals: { dog: { "YYYY-MM-DD": { breakfast: bool, dinner: bool, other: str } } }
+const EAT_COLORS = ["#cf5b52", "#e0a63a", "var(--good)"];   // 0, 1, 2 meals eaten
+function mealsFor(dog) { return (DATA.meals || {})[dog] || {}; }
+function mealCount(rec) {
+  if (!rec || (rec.breakfast === undefined && rec.dinner === undefined)) return null;
+  return (rec.breakfast ? 1 : 0) + (rec.dinner ? 1 : 0);
+}
+
+function renderEating(dog) {
+  const meals = mealsFor(dog);
+  const lastDataWk = Object.keys(meals).reduce((mx, k) => {
+    const w = Math.floor((new Date(k + "T00:00:00") - planStart) / WEEK) + 1;
+    return Math.max(mx, w);
+  }, 1);
+  const endWeek = Math.max(planWeek, lastDataWk, 1);
+  const cell = 26, gap = 2, top = 22, left = 44;
+  const Wd = left + 7 * (cell + gap) + 10, Hd = top + endWeek * (cell + gap) + 6;
+  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="Meals eaten per day">`;
+  "MTWTFSS".split("").forEach((c, i) =>
+    s += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
+  for (let w = 1; w <= endWeek; w++) {
+    const mon = addDays(planStart, (w - 1) * 7), yr = top + (w - 1) * (cell + gap);
+    s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}">W${w}</text>`;
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(mon, i), k = localISO(d), x = left + i * (cell + gap);
+      const future = d > today, rec = meals[k], n = mealCount(rec);
+      const fill = n === null ? "var(--surface)" : EAT_COLORS[n];
+      let attrs = "";
+      if (!future) {
+        const t = n === null
+          ? `<b>${fmtDay(d)}</b>not logged`
+          : `<b>${fmtDay(d)}</b>${n} of 2 meals · B: ${rec.breakfast ? "ate" : "skipped"}, D: ${rec.dinner ? "ate" : "skipped"}`
+            + (rec.other ? `<br>◆ ${esc(rec.other)}` : "");
+        attrs = ` data-tip="${esc(t)}"`;
+      }
+      s += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4" fill="${fill}"` +
+           ` stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}" stroke-width="${+d === +today ? 1.5 : 1}"` +
+           (future ? ' opacity="0.35"' : "") + attrs + `/>`;
+      if (rec && rec.other && !future)
+        s += `<path d="M ${x + cell - 8} ${yr + 2} l 6 0 l 0 6 z" fill="var(--ink)" pointer-events="none"/>`;
+    }
+  }
+  s += `</svg>`;
+  const el = document.getElementById("eatmap"); el.innerHTML = s; bindTips(el);
+  document.getElementById("eatLegend").innerHTML =
+    `<span>meals eaten:</span>` +
+    [0, 1, 2].map(n => `<span class="sw" style="background:${EAT_COLORS[n]}"></span><span>${n}</span>`).join("") +
+    `<span class="sw" style="background:var(--surface)"></span><span>not logged</span>` +
+    `<span style="margin-left:8px">◆ different/new food</span>`;
+  const days = Object.keys(meals).sort().reverse().slice(0, 21);
+  document.getElementById("eatTable").innerHTML = days.length
+    ? `<table><tr><th>Date</th><th>Breakfast</th><th>Dinner</th><th>Other</th></tr>` +
+      days.map(k => { const r = meals[k]; return `<tr><td>${k}</td>` +
+        `<td>${r.breakfast === undefined ? "—" : r.breakfast ? "ate" : "skipped"}</td>` +
+        `<td>${r.dinner === undefined ? "—" : r.dinner ? "ate" : "skipped"}</td>` +
+        `<td>${esc(r.other || "")}</td></tr>`; }).join("") + `</table>`
+    : `<div class="sub">No meals logged yet.</div>`;
+}
+
+function renderPepperKpis(dog) {
+  const meals = mealsFor(dog);
+  const wl = DATA.weight.filter(e => e.dog === dog).sort((a, b) => a.date < b.date ? -1 : 1);
+  const w = wl[wl.length - 1], prev = wl[wl.length - 2];
+  const dw = w && prev ? w.lb - prev.lb : null;
+  let eaten = 0, skipped = 0;
+  for (let i = 0; i < 7; i++) {
+    const rec = meals[localISO(addDays(today, -i))];
+    if (!rec) continue;
+    for (const m of ["breakfast", "dinner"]) {
+      if (rec[m] === true) eaten++; else if (rec[m] === false) skipped++;
+    }
+  }
+  document.getElementById("kpisPepper").innerHTML = `
+    <div class="tile"><div class="label">Weight</div>
+      <div class="value">${w ? w.lb.toFixed(1) : "—"}<small> lb</small></div>
+      ${dw !== null && dw !== 0 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
+      ${cfg.other_dog_targets_lb && cfg.other_dog_targets_lb[dog] ? `<div class="meta">target ${cfg.other_dog_targets_lb[dog][0]}–${cfg.other_dog_targets_lb[dog][1]} lb</div>` : ""}</div>
+    <div class="tile"><div class="label">Meals this week</div>
+      <div class="value">${eaten}<small> of 14</small></div>
+      <div class="meta">last 7 days</div></div>
+    <div class="tile"><div class="label">Skipped meals</div>
+      <div class="value">${skipped}</div>
+      <div class="delta ${skipped ? "bad" : "good"}">${skipped ? "this week" : "none this week"}</div></div>`;
+}
+
+// ---- tabs / pages -----------------------------------------------------------------
+let activeDog = cfg.dog;
+try { const saved = localStorage.getItem("dogPage"); if (saved && dogList.includes(saved)) activeDog = saved; } catch (e) {}
+{ const h = decodeURIComponent(location.hash.replace(/^#/, "")); if (dogList.includes(h)) activeDog = h; }
+
+function setPage(dog) {
+  activeDog = dog;
+  try { localStorage.setItem("dogPage", dog); } catch (e) {}
+  if (decodeURIComponent(location.hash.replace(/^#/, "")) !== dog) location.hash = dog;
+  document.querySelectorAll("[data-page]").forEach(el => {
+    const onPage = el.getAttribute("data-page").split(" ").includes(dog);
+    el.dataset.onpage = onPage ? "1" : "0";
+    // "cond" cards manage their own show-logic; setPage only hides them off-page
+    if (el.classList.contains("cond")) { if (!onPage) el.style.display = "none"; }
+    else el.style.display = onPage ? "" : "none";
+  });
+  renderNotes(dog);
+  document.getElementById("pageTitle").textContent =
+    dog === cfg.dog ? "Nala's Comeback Plan" : `${dog}'s Health Log`;
+  document.querySelectorAll("#tabs .tab").forEach(t => {
+    const on = t.dataset.dog === dog;
+    t.classList.toggle("active", on);
+    t.style.background = on ? dogColor(dog) : "";
+  });
+  const wd = document.getElementById("wDog"), nd = document.getElementById("nDog");
+  if (wd) wd.value = dog; if (nd) nd.value = dog;
+}
+
+document.getElementById("tabs").innerHTML = dogList
+  .map(d => `<button class="tab" data-dog="${esc(d)}">${esc(d)}</button>`).join("");
+document.querySelectorAll("#tabs .tab").forEach(t => t.onclick = () => setPage(t.dataset.dog));
+
+// render Pepper's panels for every non-primary dog (only Pepper for now)
+for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderPepperKpis(d); }
 
 // ---- live mode (served by `nala.py serve`) ----------------------------------------
 if (DATA.live) {
@@ -770,20 +913,78 @@ if (DATA.live) {
 
   document.getElementById("toolbar").classList.add("show");
 
+  const card = document.getElementById("reviewCard");
+  const list = document.getElementById("reviewList");
+  const fmtISO = k => new Date(k + "T00:00:00").toLocaleDateString(undefined,
+    { weekday: "short", month: "short", day: "numeric" });
+  const todayISO = localISO(today);
+
+  // one row per (activity, dog) still needing a yes/no for that dog
+  const activityRows = (a) => {
+    const far = a.latlng && cfg.home_latlng
+      ? Math.hypot((a.latlng[0] - cfg.home_latlng[0]) * 69,
+                   (a.latlng[1] - cfg.home_latlng[1]) * 69 * Math.cos(cfg.home_latlng[0] * Math.PI / 180)) : 0;
+    const flag = far > (cfg.home_radius_mi || 15) ? ` <span class="flag">⚑ ~${Math.round(far)} mi from home</span>` : "";
+    const dogs = a.dogs || {};
+    return dogList.filter(d => dogs[d] === null || dogs[d] === undefined).map(dog =>
+      `<div class="review-item" data-kind="activity" data-id="${a.id}" data-dog="${esc(dog)}">
+        <div class="info"><span class="d">${a.date.slice(0, 10)}</span>${esc(a.name)}
+          <span class="d"> · ${esc(a.type)} · ${a.min} min · ${a.mi.toFixed(1)} mi</span>${flag}</div>
+        <div class="acts"><button class="btn yes">With ${esc(dog)}</button>
+          <button class="btn no">Not ${esc(dog)}</button></div></div>`);
+  };
+
+  const circleRow = (dog, k) => {
+    const isToday = k === todayISO;
+    const q = isToday ? `Has ${esc(dog)} done the circle today?` : `Did ${esc(dog)} do the circle?`;
+    return `<div class="review-item" data-kind="circle" data-date="${k}" data-dog="${esc(dog)}">
+      <div class="info"><span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>
+        <span class="d">${isToday ? "Today" : fmtISO(k)}</span>${q}</div>
+      <div class="acts"><button class="btn yes">Yes</button>
+        <button class="btn no">No</button></div></div>`;
+  };
+
+  const showReview = (title, rows) => {
+    document.getElementById("reviewTitle").textContent = title;
+    list.innerHTML = rows.join("");
+    card.style.display = "";
+    card.dataset.onpage = "1";
+    list.querySelectorAll(".review-item[data-kind]").forEach(item => {
+      const [yes, no] = item.querySelectorAll("button");
+      const handle = async (value) => {
+        yes.disabled = no.disabled = true;
+        try {
+          const d = item.dataset;
+          if (d.kind === "activity")
+            await post("/api/classify", { id: d.id, dog: d.dog, value });
+          else
+            await post("/api/circle", { date: d.date, dog: d.dog, value });
+          item.style.opacity = "0.4";
+          if (![...list.querySelectorAll(".review-item[data-kind]")].some(i => i.style.opacity !== "0.4"))
+            { flash("All confirmed — reloading…"); setTimeout(() => location.reload(), 700); }
+        } catch (e) { flash("Failed: " + e.message, 4000); yes.disabled = no.disabled = false; }
+      };
+      yes.onclick = () => handle(true);
+      no.onclick = () => handle(false);
+    });
+  };
+
   const syncBtn = document.getElementById("syncBtn");
   syncBtn.onclick = async () => {
     syncBtn.disabled = true; syncBtn.textContent = "Syncing…";
     try {
       const r = await post("/api/sync");
-      const acts = r.activities || [], circles = r.circles || [];
-      const asks = acts.filter(a => a.pet === null).length + circles.length;
+      const acts = r.activities || [], byDog = r.circlesByDog || {};
+      const actRows = acts.flatMap(activityRows);
+      const circRows = dogList.flatMap(d => (byDog[d] || []).map(k => circleRow(d, k)));
+      const asks = actRows.length + circRows.length;
       if (!asks) {
         flash(r.new ? `${r.new} new outing(s) pulled — reloading…` : "Up to date — reloading…");
         setTimeout(() => location.reload(), 700);
         return;
       }
-      showReview(`Sync: ${r.new} new outing(s), ${asks} to answer`,
-                 acts.map(activityRow).concat(circles.map(circleRow)));
+      setPage(cfg.dog);
+      showReview(`Sync: ${r.new} new outing(s), ${asks} to confirm`, actRows.concat(circRows));
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
       syncBtn.disabled = false; syncBtn.textContent = "↻ Sync now";
     } catch (e) {
@@ -794,8 +995,7 @@ if (DATA.live) {
 
   const wBtn = document.getElementById("wBtn"), wIn = document.getElementById("wIn");
   const wDog = document.getElementById("wDog");
-  wDog.innerHTML = [cfg.dog, ...(cfg.other_dogs || [])]
-    .map(d => `<option>${esc(d)}</option>`).join("");
+  wDog.innerHTML = dogList.map(d => `<option>${esc(d)}</option>`).join("");
   wBtn.onclick = async () => {
     const lb = parseFloat(wIn.value);
     if (!lb) return flash("Enter a weight first");
@@ -817,64 +1017,37 @@ if (DATA.live) {
     catch (e) { flash("Failed: " + e.message, 4000); }
   };
 
-  // review rows: activity classification + circle-day questions.
-  // Circle rows are only ever rendered from sync results — the card at page
-  // load holds nothing but activities still awaiting a with/without answer.
-  const card = document.getElementById("reviewCard");
-  const list = document.getElementById("reviewList");
-  const fmtISO = k => new Date(k + "T00:00:00").toLocaleDateString(undefined,
-    { weekday: "short", month: "short", day: "numeric" });
-  const todayISO = localISO(today);
-
-  const activityRow = (a) => {
-    const far = a.latlng && cfg.home_latlng
-      ? Math.hypot((a.latlng[0] - cfg.home_latlng[0]) * 69,
-                   (a.latlng[1] - cfg.home_latlng[1]) * 69 * Math.cos(cfg.home_latlng[0] * Math.PI / 180)) : 0;
-    const flag = far > (cfg.home_radius_mi || 15) ? ` <span class="flag">⚑ ~${Math.round(far)} mi from home</span>` : "";
-    const info = `<div class="info"><span class="d">${a.date.slice(0, 10)}</span>${esc(a.name)}
-        <span class="d"> · ${esc(a.type)} · ${a.min} min · ${a.mi.toFixed(1)} mi</span>${flag}</div>`;
-    if (a.pet !== null && a.pet !== undefined)
-      return `<div class="review-item">${info}
-        <div class="acts"><span class="d">${a.pet ? `with ${esc(cfg.dog)}` : `not ${esc(cfg.dog)}`}</span></div></div>`;
-    return `<div class="review-item" data-kind="activity" data-id="${a.id}">${info}
-      <div class="acts"><button class="btn yes">With ${esc(cfg.dog)}</button>
-        <button class="btn no">Not ${esc(cfg.dog)}</button></div></div>`;
-  };
-
-  const circleRow = (k) => {
-    const isToday = k === todayISO;
-    const q = isToday ? "Has she done the circle today?" : "Did she do the circle?";
-    return `<div class="review-item" data-kind="circle" data-date="${k}">
-      <div class="info"><span class="d">${isToday ? "Today" : fmtISO(k)}</span>${q}</div>
-      <div class="acts"><button class="btn yes">Yes, circle</button>
-        <button class="btn no">${isToday ? "Not today" : "No circle"}</button></div></div>`;
-  };
-
-  const showReview = (title, rows) => {
-    document.getElementById("reviewTitle").textContent = title;
-    list.innerHTML = rows.join("");
-    card.style.display = "";
-    list.querySelectorAll(".review-item[data-kind]").forEach(item => {
-      const [yes, no] = item.querySelectorAll("button");
-      const handle = async (value) => {
-        yes.disabled = no.disabled = true;
-        try {
-          if (item.dataset.kind === "activity")
-            await post("/api/classify", { id: item.dataset.id, value });
-          else
-            await post("/api/circle", { date: item.dataset.date, value });
-          item.style.opacity = "0.4";
-          if (![...list.querySelectorAll(".review-item[data-kind]")].some(i => i.style.opacity !== "0.4"))
-            { flash("All confirmed — reloading…"); setTimeout(() => location.reload(), 700); }
-        } catch (e) { flash("Failed: " + e.message, 4000); yes.disabled = no.disabled = false; }
-      };
-      yes.onclick = () => handle(true);
-      no.onclick = () => handle(false);
+  // meal logging (Pepper's eating card)
+  const petDog = dogList.find(d => d !== cfg.dog);
+  const mealLog = document.getElementById("mealLog");
+  if (petDog && mealLog) {
+    mealLog.style.display = "flex";
+    mealLog.innerHTML = `<span class="sub">Log ${esc(petDog)} today —</span>` +
+      ["breakfast", "dinner"].map(m =>
+        `<span>${m[0].toUpperCase() + m.slice(1)}</span>` +
+        `<button class="btn yes" data-meal="${m}" data-val="1">ate</button>` +
+        `<button class="btn no" data-meal="${m}" data-val="0">skip</button>`).join("") +
+      `<input id="otherIn" placeholder="different/new food…" style="width:150px">` +
+      `<button class="btn" id="otherBtn">Log food</button>`;
+    const reload = () => setTimeout(() => location.reload(), 700);
+    mealLog.querySelectorAll("button[data-meal]").forEach(b => b.onclick = async () => {
+      try { await post("/api/meal", { dog: petDog, [b.dataset.meal]: b.dataset.val === "1" });
+            flash(`${petDog} ${b.dataset.meal} → ${b.dataset.val === "1" ? "ate" : "skipped"} — reloading…`); reload(); }
+      catch (e) { flash("Failed: " + e.message, 4000); }
     });
-  };
+    document.getElementById("otherBtn").onclick = async () => {
+      const v = document.getElementById("otherIn").value.trim();
+      if (!v) return flash("Type what she ate first");
+      try { await post("/api/meal", { dog: petDog, other: v }); flash("Logged — reloading…"); reload(); }
+      catch (e) { flash("Failed: " + e.message, 4000); }
+    };
+  }
 
   const unc = DATA.unclassified || [];
   if (unc.length)
-    showReview(`Needs your confirmation (${unc.length})`, unc.map(activityRow));
+    showReview(`Needs your confirmation`, unc.flatMap(activityRows));
 }
+
+setPage(activeDog);
+
 </script>

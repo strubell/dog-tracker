@@ -40,6 +40,7 @@ ACTIVITIES = DATA / "activities.json"
 WEIGHT = DATA / "weight.json"
 NOTES = DATA / "notes.json"
 CIRCLES = DATA / "circles.json"
+MEALS = DATA / "meals.json"
 AUTH = DATA / "strava_auth.json"
 TEMPLATE = BASE / "dashboard_template.html"
 DASHBOARD = BASE / "dashboard.html"
@@ -72,6 +73,22 @@ def save(path, obj):
 
 def config():
     return json.loads((BASE / "config.json").read_text())
+
+
+def dog_names(cfg):
+    """Primary dog first, then any others, in config order."""
+    return [cfg["dog"]] + list(cfg.get("other_dogs", []))
+
+
+def derive_pet(dogs):
+    """Collapse a per-dog map to the legacy tri-state `pet`: True if any dog
+    came, False if all explicitly did not, None while any answer is missing."""
+    vals = list(dogs.values())
+    if any(v is True for v in vals):
+        return True
+    if vals and all(v is False for v in vals):
+        return False
+    return None
 
 
 def tz():
@@ -256,9 +273,7 @@ def _away_hint(rec, cfg):
     return ""
 
 
-def _ask(rec, dog, hint=""):
-    prompt = (f"  [{rec['id']}] {rec['date'][:10]}  {rec['type']:<10} {rec['min']:>4} min "
-              f"{rec['mi']:>5.1f} mi  {rec['name'][:44]}{hint}\n  with {dog}? [y/n/s(kip)] ")
+def _ask_yn(prompt):
     while True:
         ans = input(prompt).strip().lower()
         if ans in ("y", "yes"):
@@ -267,6 +282,21 @@ def _ask(rec, dog, hint=""):
             return False
         if ans in ("s", "skip", ""):
             return None
+
+
+def _ask_dogs(rec, cfg, hint=""):
+    """Confirm each dog independently for one outing; returns a dogs map.
+    Enter/skip leaves a dog's current answer unchanged."""
+    print(f"  [{rec['id']}] {rec['date'][:10]}  {rec['type']:<10} {rec['min']:>4} min "
+          f"{rec['mi']:>5.1f} mi  {rec['name'][:44]}{hint}")
+    dogs = dict(rec.get("dogs") or {})
+    for d in dog_names(cfg):
+        ans = _ask_yn(f"    with {d}? [y/n/s(kip)] ")
+        if ans is not None:
+            dogs[d] = ans
+        else:
+            dogs.setdefault(d, None)
+    return dogs
 
 
 def fetch_new_activities(cfg, db, on_each=None):
@@ -298,6 +328,8 @@ def fetch_new_activities(cfg, db, on_each=None):
             "elev_ft": round(detail.get("total_elevation_gain", 0) * 3.28084),
             "latlng": detail.get("start_latlng") or None,
             "pet": pet,
+            # keyword hit or auto-no applies to all dogs; unknown → all None
+            "dogs": {d: pet for d in dog_names(cfg)},
             "source": "api",
         }
         db[rec["id"]] = rec
@@ -313,10 +345,13 @@ def cmd_sync(args):
     interactive = sys.stdin.isatty() and not args.batch
 
     def log_one(rec, hint):
-        if pet_needs_input := (rec["pet"] is None and interactive):
-            rec["pet"] = _ask(rec, cfg["dog"], hint)
+        if rec["pet"] is None and interactive:
+            rec["dogs"] = _ask_dogs(rec, cfg, hint)
+            rec["pet"] = derive_pet(rec["dogs"])
             save(ACTIVITIES, db)
-        tag = {True: f"with {cfg['dog']}", False: f"not {cfg['dog']}", None: "UNCLASSIFIED"}[rec["pet"]]
+        with_dogs = [d for d, v in (rec.get("dogs") or {}).items() if v]
+        tag = f"with {', '.join(with_dogs)}" if with_dogs else (
+            "UNCLASSIFIED" if rec["pet"] is None else "no dogs")
         print(f"  + [{rec['id']}] {rec['date'][:10]} {rec['name'][:40]!r} → {tag}{hint}")
 
     n_all, n_new = fetch_new_activities(cfg, db, on_each=log_one)
@@ -344,18 +379,29 @@ def cmd_review(args):
         return
     print(f"{len(pending)} to classify (Enter to skip):")
     for rec in pending:
-        rec["pet"] = _ask(rec, cfg["dog"], _away_hint(rec, cfg))
+        rec["dogs"] = _ask_dogs(rec, cfg, _away_hint(rec, cfg))
+        rec["pet"] = derive_pet(rec["dogs"])
         save(ACTIVITIES, db)
     cmd_build(args)
 
 
 def cmd_mark(args):
+    cfg = config()
     db = load(ACTIVITIES, {})
     if args.id not in db:
         sys.exit(f"No activity {args.id} in the log.")
-    db[args.id]["pet"] = args.value == "yes"
+    rec = db[args.id]
+    val = args.value == "yes"
+    dogs = dict(rec.get("dogs") or {d: None for d in dog_names(cfg)})
+    if args.dog:
+        dogs[args.dog] = val
+    else:
+        dogs = {d: val for d in dog_names(cfg)}
+    rec["dogs"] = dogs
+    rec["pet"] = derive_pet(dogs)
     save(ACTIVITIES, db)
-    print(f"{db[args.id]['name']!r} → {args.value}")
+    who = args.dog or "both dogs"
+    print(f"{rec['name']!r} · {who} → {args.value}")
     cmd_build(args)
 
 
@@ -414,8 +460,9 @@ def _walkish(t):
     return t.replace(" ", "").lower() in ("hike", "walk", "snowshoe")
 
 
-def _walk_days(db):
-    return {r["date"][:10] for r in db.values() if r["pet"] and _walkish(r["type"])}
+def _walk_days(db, dog):
+    return {r["date"][:10] for r in db.values()
+            if (r.get("dogs") or {}).get(dog) and _walkish(r["type"])}
 
 
 def _away_days(cfg):
@@ -428,69 +475,108 @@ def _away_days(cfg):
     return days
 
 
-def circle_days(cfg, db):
-    """Days the baseline 'circle' walk counts. Before plan start it is assumed
-    on every in-town day without a logged hike (which subsumes it); from plan
-    start it counts exactly when explicitly answered yes — independent of any
-    logged hike, since the circle is a separate outing."""
-    away, walked = _away_days(cfg), _walk_days(db)
+def _circle_answer(answers, k, dog):
+    """That dog's answer for day k, or None if unanswered."""
+    return (answers.get(k) or {}).get(dog)
+
+
+def circle_days(cfg, db, dog):
+    """Days the baseline 'circle' walk counts for one dog. Before plan start
+    it is assumed on every in-town day without a logged hike (which subsumes
+    it); from plan start it counts exactly when explicitly answered yes for
+    that dog — independent of any logged hike, since the circle is separate."""
+    away, walked = _away_days(cfg), _walk_days(db, dog)
     answers = load(CIRCLES, {})
     out, d = [], date.fromisoformat(cfg["circle"]["since"])
     today = datetime.now(tz()).date()
     while d <= today:
         k = d.isoformat()
-        if (answers.get(k) if k >= cfg["plan_start"]
-                else k not in walked and k not in away and answers.get(k, True)):
+        a = _circle_answer(answers, k, dog)
+        if (a if k >= cfg["plan_start"]
+                else k not in walked and k not in away and (a if a is not None else True)):
             out.append(k)
         d += timedelta(days=1)
     return out
 
 
-def unanswered_circle_days(cfg, db):
-    """Days since plan start (today included) with no circle answer yet.
-    Logged hikes don't count as an answer — the circle is asked about
-    explicitly, every day. Today can be skipped and will be asked again."""
+def unanswered_circle_days(cfg, db, dog):
+    """Days since plan start (today included) with no circle answer yet for
+    that dog. Today can be skipped and will be asked again."""
     answers = load(CIRCLES, {})
     out, d = [], date.fromisoformat(cfg["plan_start"])
     today = datetime.now(tz()).date()
     while d <= today:
         k = d.isoformat()
-        if k not in answers:
+        if _circle_answer(answers, k, dog) is None:
             out.append(k)
         d += timedelta(days=1)
     return out
 
 
 def _ask_circles(cfg, db):
-    pending = unanswered_circle_days(cfg, db)
-    if not pending:
-        return
-    answers = load(CIRCLES, {})
     today = datetime.now(tz()).date().isoformat()
-    print(f"{len(pending)} day(s) without a circle answer — did {cfg['dog']} do the circle?")
-    for k in pending:
-        nice = date.fromisoformat(k).strftime("%a %b %-d")
-        if k == today:
-            nice += " (today — skip if not yet)"
-        while True:
-            ans = input(f"  {nice} ({k}) — circle? [y/n/s(kip)] ").strip().lower()
-            if ans in ("y", "yes"):
-                answers[k] = True
-            elif ans in ("n", "no"):
-                answers[k] = False
-            elif ans in ("s", "skip", ""):
-                pass
-            else:
-                continue
-            break
-        save(CIRCLES, answers)
+    for dog in dog_names(cfg):
+        pending = unanswered_circle_days(cfg, db, dog)
+        if not pending:
+            continue
+        answers = load(CIRCLES, {})
+        print(f"{len(pending)} day(s) without a circle answer for {dog}:")
+        for k in pending:
+            nice = date.fromisoformat(k).strftime("%a %b %-d")
+            if k == today:
+                nice += " (today — skip if not yet)"
+            ans = _ask_yn(f"  {nice} ({k}) — {dog} circle? [y/n/s(kip)] ")
+            if ans is not None:
+                answers.setdefault(k, {})[dog] = ans
+                save(CIRCLES, answers)
 
 
 def cmd_circle(args):
+    cfg = config()
     answers = load(CIRCLES, {})
-    answers[_date_arg(args)] = args.value == "yes"
+    k = _date_arg(args)
+    entry = answers.setdefault(k, {})
+    val = args.value == "yes"
+    if args.dog:
+        entry[args.dog] = val
+    else:
+        for d in dog_names(cfg):
+            entry[d] = val
     save(CIRCLES, answers)
-    print(f"Circle on {_date_arg(args)}: {args.value}")
+    print(f"Circle on {k} · {args.dog or 'both dogs'}: {args.value}")
+    cmd_build(args)
+
+
+# ---------------------------------------------------------------- meals
+
+def log_meal(dog, d, breakfast=None, dinner=None, other=None):
+    """Record a dog's meals for a day. breakfast/dinner: True (ate), False
+    (skipped), or None (leave unchanged). other: description of any different/
+    new food (empty string clears it, None leaves unchanged)."""
+    store = load(MEALS, {})
+    day = store.setdefault(dog, {}).setdefault(d, {})
+    if breakfast is not None:
+        day["breakfast"] = breakfast
+    if dinner is not None:
+        day["dinner"] = dinner
+    if other is not None:
+        o = other.strip()
+        if o:
+            day["other"] = o
+        else:
+            day.pop("other", None)
+    save(MEALS, store)
+    return day
+
+
+def cmd_meal(args):
+    dog = args.dog or config()["dog"]
+    yn = {"yes": True, "no": False}
+    day = log_meal(dog, _date_arg(args), yn.get(args.breakfast),
+                   yn.get(args.dinner), args.other)
+    ate = sum(1 for m in ("breakfast", "dinner") if day.get(m))
+    print(f"{dog} on {_date_arg(args)}: {ate} meal(s) eaten"
+          + (f" · other: {day['other']}" if day.get("other") else ""))
     cmd_build(args)
 
 
@@ -499,15 +585,24 @@ def cmd_circle(args):
 def build_payload(cfg, db):
     keep = [r for r in db.values() if r["pet"] is not False]
     keep.sort(key=lambda r: r["date"])
+    dogs = dog_names(cfg)
+    has_circle = "circle" in cfg
+    by_dog = {d: (circle_days(cfg, db, d) if has_circle else []) for d in dogs}
+    unans = {d: (unanswered_circle_days(cfg, db, d) if has_circle else []) for d in dogs}
+    primary = cfg["dog"]
     return {
         "config": cfg,
         "activities": keep,
         "unclassified": sorted((r for r in db.values() if r["pet"] is None),
                                key=lambda r: r["date"], reverse=True),
-        "circles": circle_days(cfg, db) if "circle" in cfg else [],
-        "circles_unanswered": unanswered_circle_days(cfg, db) if "circle" in cfg else [],
+        # primary dog's lists kept for the activity charts; per-dog maps too
+        "circles": by_dog.get(primary, []),
+        "circles_unanswered": unans.get(primary, []),
+        "circlesByDog": by_dog,
+        "circles_unansweredByDog": unans,
         "weight": load(WEIGHT, []),
         "notes": load(NOTES, []),
+        "meals": load(MEALS, {}),
         "generated": datetime.now(tz()).isoformat(timespec="minutes"),
     }
 
@@ -568,17 +663,30 @@ def cmd_serve(args):
                         cfg, db, on_each=lambda rec, hint: added.append(rec))
                     return self._send(200, json.dumps(
                         {"checked": n_all, "new": n_new, "activities": added,
-                         "circles": unanswered_circle_days(cfg, db)}))
+                         "circlesByDog": {d: unanswered_circle_days(cfg, db, d)
+                                          for d in dog_names(cfg)}}))
                 if self.path == "/api/classify":
                     aid = str(body["id"])
                     if aid not in db:
                         return self._send(404, json.dumps({"error": "unknown id"}))
-                    db[aid]["pet"] = bool(body["value"])
+                    rec = db[aid]
+                    dogs = dict(rec.get("dogs") or {d: None for d in dog_names(cfg)})
+                    if body.get("dog"):
+                        dogs[body["dog"]] = bool(body["value"])
+                    else:
+                        dogs = {d: bool(body["value"]) for d in dog_names(cfg)}
+                    rec["dogs"] = dogs
+                    rec["pet"] = derive_pet(dogs)
                     save(ACTIVITIES, db)
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/circle":
                     ans = load(CIRCLES, {})
-                    ans[body["date"]] = bool(body["value"])
+                    entry = ans.setdefault(body["date"], {})
+                    if body.get("dog"):
+                        entry[body["dog"]] = bool(body["value"])
+                    else:
+                        for d in dog_names(cfg):
+                            entry[d] = bool(body["value"])
                     save(CIRCLES, ans)
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/weight":
@@ -588,6 +696,11 @@ def cmd_serve(args):
                 if self.path == "/api/note":
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
                     log_note(body["text"], d, body.get("dog"))
+                    return self._send(200, json.dumps({"ok": True}))
+                if self.path == "/api/meal":
+                    d = body.get("date") or datetime.now(tz()).date().isoformat()
+                    log_meal(body["dog"], d, body.get("breakfast"),
+                             body.get("dinner"), body.get("other"))
                     return self._send(200, json.dumps({"ok": True}))
             except urllib.error.HTTPError as e:
                 return self._send(502, json.dumps({"error": f"Strava API: {e.code}"}))
@@ -656,12 +769,22 @@ def main():
     s = sub.add_parser("mark", help="classify one activity by ID")
     s.add_argument("id")
     s.add_argument("value", choices=["yes", "no"])
+    s.add_argument("--dog", help="one dog (default: set all dogs)")
     s.set_defaults(func=cmd_mark)
 
     s = sub.add_parser("circle", help="record whether the baseline circle walk happened")
     s.add_argument("value", choices=["yes", "no"])
+    s.add_argument("--dog", help="one dog (default: set all dogs)")
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
     s.set_defaults(func=cmd_circle)
+
+    s = sub.add_parser("meal", help="log a dog's meals for a day")
+    s.add_argument("--dog", help="which dog (default the primary one)")
+    s.add_argument("--breakfast", choices=["yes", "no"], help="ate breakfast?")
+    s.add_argument("--dinner", choices=["yes", "no"], help="ate dinner?")
+    s.add_argument("--other", help="any different/new food eaten (blank clears)")
+    s.add_argument("--date", help="YYYY-MM-DD (default today)")
+    s.set_defaults(func=cmd_meal)
 
     s = sub.add_parser("weight", help="log a weigh-in (lb)")
     s.add_argument("lb", type=float)
