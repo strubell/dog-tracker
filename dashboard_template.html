@@ -162,7 +162,7 @@
 <div class="page">
   <header>
     <div class="hrow">
-      <img id="pup" class="pup" src="__PHOTO__" alt="Nala" data-page="Nala">
+      <img id="pup" class="pup" alt="">
       <div>
         <h1 id="pageTitle">Nala's Comeback Plan</h1>
         <div class="sub" id="subtitle" data-page="Nala"></div>
@@ -174,12 +174,10 @@
     <div class="toolbar" id="toolbar">
       <button class="btn primary" id="syncBtn">↻ Sync now</button>
       <div class="sep"></div>
-      <div class="grp"><select id="wDog"></select>
-        <input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
+      <div class="grp"><input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
         <button class="btn" id="wBtn">Log weight</button></div>
       <div class="sep"></div>
-      <div class="grp"><select id="nDog"></select>
-        <input id="nIn" type="text" placeholder="add a note…" style="width:180px">
+      <div class="grp"><input id="nIn" type="text" placeholder="add a note…" style="width:180px">
         <button class="btn" id="nBtn">Add note</button></div>
     </div>
   </header>
@@ -231,7 +229,7 @@
     </div>
   </div>
 
-  <div class="duo" style="margin-bottom:16px">
+  <div class="duo" id="weightRow" style="margin-bottom:16px">
     <div class="card" data-page="Nala Pepper">
       <h2>Weight history</h2>
       <div class="sub">All known weigh-ins</div>
@@ -246,9 +244,9 @@
     </div>
   </div>
 
-  <div class="card cond" id="feedCard" data-page="Nala Pepper" style="display:none">
+  <div class="card" id="feedCard" data-page="Nala Pepper" style="margin-bottom:16px">
     <h2>Feeding</h2>
-    <div class="sub">Current daily rations</div>
+    <div class="sub">Current daily ration</div>
     <div id="feeding" style="display:flex; gap:28px; flex-wrap:wrap"></div>
   </div>
 
@@ -272,8 +270,6 @@ const DATA = /*__DATA__*/null;
 const cfg = DATA.config;
 const dogColor = name =>
   (cfg.dog_colors || {})[name] || (name === cfg.dog ? "var(--series)" : "var(--series-2)");
-{ const p = document.getElementById("pup");
-  if (!p.getAttribute("src").startsWith("data:")) p.remove(); }
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 const DAY = 86400000, WEEK = 7 * DAY;
@@ -738,26 +734,25 @@ document.getElementById("phases").innerHTML = cfg.phases.map(p => {
     `</table>`;
 }
 
-// ---- feeding ----------------------------------------------------------------------
-if (cfg.feeding && Object.keys(cfg.feeding).length) {
-  document.getElementById("feedCard").style.display = "";
+// ---- feeding (active dog only) ----------------------------------------------------
+function renderFeeding(dog) {
+  const card = document.getElementById("feedCard");
+  const items = (cfg.feeding || {})[dog];
+  if (!items || !items.length) { card.style.display = "none"; return; }
+  if (card.dataset.onpage !== "0") card.style.display = "";
   const frac = c => ({ "0.25": "¼", "0.33": "⅓", "0.50": "½", "0.67": "⅔", "0.75": "¾" })[c.toFixed(2)] || c;
+  const kcal = items.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
+  const rows = items.map(it => {
+    const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
+    const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup`
+              : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
+    return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span></li>`;
+  }).join("");
   document.getElementById("feeding").innerHTML =
-    Object.entries(cfg.feeding).map(([dog, items]) => {
-      const kcal = items.reduce((t, it) =>
-        t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
-      const rows = items.map(it => {
-        const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
-        const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup`
-                  : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
-        return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""}` +
-               ` <span class="d">(${per})</span></li>`;
-      }).join("");
-      return `<div style="min-width:280px; flex:1">
-        <div style="margin-bottom:6px"><span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>
-          <span class="sub">${Math.round(kcal)} kcal/day</span></div>
-        <ul class="notes">${rows}</ul></div>`;
-    }).join("");
+    `<div style="flex:1"><div style="margin-bottom:6px">` +
+    `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
+    `<span class="sub">${Math.round(kcal)} kcal/day</span></div>` +
+    `<ul class="notes">${rows}</ul></div>`;
 }
 
 // ---- notes (filtered to the active dog) -------------------------------------------
@@ -875,7 +870,15 @@ function setPage(dog) {
     if (el.classList.contains("cond")) { if (!onPage) el.style.display = "none"; }
     else el.style.display = onPage ? "" : "none";
   });
+  // header photo for this dog
+  const pup = document.getElementById("pup"), photo = (DATA.photos || {})[dog];
+  if (photo) { pup.src = photo; pup.alt = dog; pup.style.display = ""; } else pup.style.display = "none";
+  // feeding: beside the weight plot on a health page, full-width on the plan page
+  const feed = document.getElementById("feedCard"), row = document.getElementById("weightRow");
+  if (dog === cfg.dog) { row.after(feed); feed.style.marginBottom = "16px"; }
+  else { row.appendChild(feed); feed.style.marginBottom = "0"; }
   renderNotes(dog);
+  renderFeeding(dog);
   if (window.renderWeightHistory) renderWeightHistory(dog);
   document.getElementById("pageTitle").textContent =
     dog === cfg.dog ? "Nala's Comeback Plan" : `${dog}'s Health Log`;
@@ -884,8 +887,6 @@ function setPage(dog) {
     t.classList.toggle("active", on);
     t.style.background = on ? dogColor(dog) : "";
   });
-  const wd = document.getElementById("wDog"), nd = document.getElementById("nDog");
-  if (wd) wd.value = dog; if (nd) nd.value = dog;
 }
 
 document.getElementById("tabs").innerHTML = dogList
@@ -993,25 +994,21 @@ if (DATA.live) {
   };
 
   const wBtn = document.getElementById("wBtn"), wIn = document.getElementById("wIn");
-  const wDog = document.getElementById("wDog");
-  wDog.innerHTML = dogList.map(d => `<option>${esc(d)}</option>`).join("");
   wBtn.onclick = async () => {
     const lb = parseFloat(wIn.value);
     if (!lb) return flash("Enter a weight first");
-    try { await post("/api/weight", { lb, dog: wDog.value });
-          flash(`Logged ${esc(wDog.value)} at ${lb} lb — reloading…`);
+    try { await post("/api/weight", { lb, dog: activeDog });
+          flash(`Logged ${esc(activeDog)} at ${lb} lb — reloading…`);
           setTimeout(() => location.reload(), 700); }
     catch (e) { flash("Failed: " + e.message, 4000); }
   };
 
   const nBtn = document.getElementById("nBtn"), nIn = document.getElementById("nIn");
-  const nDog = document.getElementById("nDog");
-  nDog.innerHTML = wDog.innerHTML;
   nBtn.onclick = async () => {
     const text = nIn.value.trim();
     if (!text) return flash("Type a note first");
-    try { await post("/api/note", { text, dog: nDog.value });
-          flash(`${esc(nDog.value)} note added — reloading…`);
+    try { await post("/api/note", { text, dog: activeDog });
+          flash(`${esc(activeDog)} note added — reloading…`);
           setTimeout(() => location.reload(), 700); }
     catch (e) { flash("Failed: " + e.message, 4000); }
   };

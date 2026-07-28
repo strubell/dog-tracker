@@ -608,18 +608,20 @@ def build_payload(cfg, db):
 
 
 def render_html(live=False):
+    import base64
     cfg = config()
     db = load(ACTIVITIES, {})
     payload = build_payload(cfg, db)
     payload["live"] = live
+    # one header photo per dog, from assets/<dog>.jpg (lowercased)
+    photos = {}
+    for d in dog_names(cfg):
+        f = BASE / "assets" / f"{d.lower()}.jpg"
+        if f.exists():
+            photos[d] = "data:image/jpeg;base64," + base64.b64encode(f.read_bytes()).decode()
+    payload["photos"] = photos
     blob = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
-    html = TEMPLATE.read_text().replace("/*__DATA__*/null", blob)
-    photo = BASE / "assets" / "nala.jpg"
-    uri = ""
-    if photo.exists():
-        import base64
-        uri = "data:image/jpeg;base64," + base64.b64encode(photo.read_bytes()).decode()
-    return html.replace("__PHOTO__", uri)
+    return TEMPLATE.read_text().replace("/*__DATA__*/null", blob)
 
 
 def cmd_build(args):
