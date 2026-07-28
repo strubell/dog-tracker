@@ -20,6 +20,7 @@
     --warn-wash:  rgba(250,178,25,0.14);
     --ramp-0: transparent; --ramp-1: #b7d3f6; --ramp-2: #86b6ef; --ramp-3: #5598e7;
     --ramp-4: #2a78d6; --ramp-5: #1c5cab; --ramp-6: #0d366b;
+    --eat-0: #f3c9c4; --eat-1: #f6e0ad; --eat-2: #c4e2ba;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -40,6 +41,7 @@
       --warn-wash:  rgba(250,178,25,0.12);
       --ramp-1: #184f95; --ramp-2: #1c5cab; --ramp-3: #256abf;
       --ramp-4: #3987e5; --ramp-5: #6da7ec; --ramp-6: #9ec5f4;
+      --eat-0: #6e4340; --eat-1: #6f6238; --eat-2: #45643f;
     }
   }
   * { box-sizing: border-box; }
@@ -86,6 +88,10 @@
          border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); cursor: pointer; }
   .tab:hover { background: var(--band); }
   .tab.active { color: #fff; border-color: transparent; }
+  #mealLog { display: none; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 14px; }
+  #mealLog.on { display: flex; }
+  #mealLog .mgrp { display: flex; gap: 6px; align-items: center; }
+  #mealLog .mgrp .lbl { color: var(--ink-2); font-weight: 600; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
            background: var(--ink); color: var(--page); padding: 9px 16px; border-radius: 8px;
            font-size: 14px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
@@ -196,7 +202,7 @@
     <div class="sub">Meals eaten each day (0/1/2) since plan start · ◆ = something different/new</div>
     <div class="scroll" id="eatmap"></div>
     <div class="legend" id="eatLegend"></div>
-    <div class="grp" id="mealLog" style="display:none; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center"></div>
+    <div id="mealLog"></div>
     <details class="tv"><summary>Table view</summary><div id="eatTable"></div></details>
   </div>
 
@@ -770,7 +776,7 @@ function renderNotes(dog) {
 
 // ---- Pepper: eating ---------------------------------------------------------------
 // meals: { dog: { "YYYY-MM-DD": { breakfast: bool, dinner: bool, other: str } } }
-const EAT_COLORS = ["#cf5b52", "#e0a63a", "var(--good)"];   // 0, 1, 2 meals eaten
+const EAT_COLORS = ["var(--eat-0)", "var(--eat-1)", "var(--eat-2)"];   // 0, 1, 2 meals eaten
 function mealsFor(dog) { return (DATA.meals || {})[dog] || {}; }
 function mealCount(rec) {
   if (!rec || (rec.breakfast === undefined && rec.dinner === undefined)) return null;
@@ -1017,14 +1023,14 @@ if (DATA.live) {
   const petDog = dogList.find(d => d !== cfg.dog);
   const mealLog = document.getElementById("mealLog");
   if (petDog && mealLog) {
-    mealLog.style.display = "flex";
-    mealLog.innerHTML = `<span class="sub">Log ${esc(petDog)} today —</span>` +
+    mealLog.classList.add("on");
+    mealLog.innerHTML =
       ["breakfast", "dinner"].map(m =>
-        `<span>${m[0].toUpperCase() + m.slice(1)}</span>` +
+        `<span class="mgrp"><span class="lbl">${m[0].toUpperCase() + m.slice(1)}</span>` +
         `<button class="btn yes" data-meal="${m}" data-val="1">ate</button>` +
-        `<button class="btn no" data-meal="${m}" data-val="0">skip</button>`).join("") +
-      `<input id="otherIn" placeholder="different/new food…" style="width:150px">` +
-      `<button class="btn" id="otherBtn">Log food</button>`;
+        `<button class="btn no" data-meal="${m}" data-val="0">skip</button></span>`).join("") +
+      `<span class="mgrp"><input id="otherIn" placeholder="different/new food…" style="width:160px">` +
+      `<button class="btn" id="otherBtn">Log</button></span>`;
     const reload = () => setTimeout(() => location.reload(), 700);
     mealLog.querySelectorAll("button[data-meal]").forEach(b => b.onclick = async () => {
       try { await post("/api/meal", { dog: petDog, [b.dataset.meal]: b.dataset.val === "1" });
