@@ -613,12 +613,14 @@ def render_html(live=False):
     db = load(ACTIVITIES, {})
     payload = build_payload(cfg, db)
     payload["live"] = live
-    # one header photo per dog, from assets/<dog>.jpg (lowercased)
+    # one header photo per dog, from assets/<dog>.{jpg,jpeg,png} (lowercased)
     photos = {}
     for d in dog_names(cfg):
-        f = BASE / "assets" / f"{d.lower()}.jpg"
-        if f.exists():
-            photos[d] = "data:image/jpeg;base64," + base64.b64encode(f.read_bytes()).decode()
+        for ext, mime in (("jpg", "jpeg"), ("jpeg", "jpeg"), ("png", "png")):
+            f = BASE / "assets" / f"{d.lower()}.{ext}"
+            if f.exists():
+                photos[d] = f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode()
+                break
     payload["photos"] = photos
     blob = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     return TEMPLATE.read_text().replace("/*__DATA__*/null", blob)
