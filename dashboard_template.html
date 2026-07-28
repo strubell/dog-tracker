@@ -634,7 +634,7 @@ function roundedTop(x, y, w, h, r) {
     const plotW = W - L - R, plotH = H - T - B;
     const lbs = seriesList.flatMap(s => s.pts.map(e => e.lb));
     const yLo = Math.min(...bands.map(b => b.lo - 2), ...lbs) - 1;
-    const yHi = Math.max(cfg.weight_start_lb, ...lbs) + 1.5;
+    const yHi = Math.max(...bands.map(b => b.hi), ...lbs) + 1.5;
     const step = yHi - yLo > 18 ? 4 : 2;
     const X = t => L + plotW * (t - x0) / (x1 - x0);
     const Y = v => T + plotH * (1 - (v - yLo) / (yHi - yLo));
@@ -695,25 +695,23 @@ function roundedTop(x, y, w, h, r) {
     for (let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m <= d1; m.setMonth(m.getMonth() + 2))
       hTicks.push({ t: +m, label: m.toLocaleDateString(undefined, { month: "short" }) });
   }
-  const histSeries = [{ name: cfg.dog, pts: entries }, ...others];
-  const histBands = [{ lo, hi, below: true,
-                       label: others.length ? `${cfg.dog} target ${lo}–${hi} lb` : `target ${lo}–${hi} lb` }];
-  for (const ser of others) {
-    const t = (cfg.other_dog_targets_lb || {})[ser.name];
-    if (t) histBands.push({ lo: t[0], hi: t[1], below: true, label: `${esc(ser.name)} target ${t[0]}–${t[1]} lb` });
-  }
-  drawWeight("weightHist", histSeries, hx0, hx1, hTicks, histBands);
-  if (others.length)
-    document.getElementById("weightLegend").innerHTML = histSeries.map(ser =>
-      `<span class="sw" style="background:${dogColor(ser.name)}"></span><span>${esc(ser.name)}</span>`).join("");
-
-  document.getElementById("weightTable").innerHTML =
-    `<table><tr><th>Date</th>${others.length ? "<th>Dog</th>" : ""}<th class="num">lb</th><th>Note</th></tr>` +
-    all.map(e => `<tr><td>${e.date}</td>${others.length ? `<td>${esc(e.dog ?? cfg.dog)}</td>` : ""}` +
-                 `<td class="num">${e.lb.toFixed(1)}</td><td>${esc(e.note ?? "")}</td></tr>`).join("") +
-    `</table>` +
-    `<div class="sub" style="margin-top:6px">Log with <code>python3 nala.py weight 53.5</code>` +
-    (others.length ? ` <code>--dog ${esc(others[0].name)}</code>` : "") + `</div>`;
+  // history chart shows only the active dog's weigh-ins + that dog's target
+  window.renderWeightHistory = function (dog) {
+    const isPrimary = dog === cfg.dog;
+    const pts = all.filter(e => (e.dog || cfg.dog) === dog);
+    const target = isPrimary ? cfg.weight_target_lb : (cfg.other_dog_targets_lb || {})[dog];
+    const bands = target
+      ? [{ lo: target[0], hi: target[1], below: true, label: `target ${target[0]}–${target[1]} lb` }] : [];
+    drawWeight("weightHist", [{ name: dog, pts }], hx0, hx1, hTicks, bands);
+    document.getElementById("weightLegend").innerHTML = "";
+    document.getElementById("weightTable").innerHTML =
+      `<table><tr><th>Date</th><th class="num">lb</th><th>Note</th></tr>` +
+      pts.map(e => `<tr><td>${e.date}</td><td class="num">${e.lb.toFixed(1)}</td>` +
+                   `<td>${esc(e.note ?? "")}</td></tr>`).join("") +
+      `</table>` +
+      `<div class="sub" style="margin-top:6px">Log with <code>python3 nala.py weight 53.5` +
+      `${isPrimary ? "" : " --dog " + esc(dog)}</code></div>`;
+  };
 }
 
 // ---- phases ----------------------------------------------------------------------
@@ -878,6 +876,7 @@ function setPage(dog) {
     else el.style.display = onPage ? "" : "none";
   });
   renderNotes(dog);
+  if (window.renderWeightHistory) renderWeightHistory(dog);
   document.getElementById("pageTitle").textContent =
     dog === cfg.dog ? "Nala's Comeback Plan" : `${dog}'s Health Log`;
   document.querySelectorAll("#tabs .tab").forEach(t => {

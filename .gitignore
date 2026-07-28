@@ -9,10 +9,10 @@
 # Generated build artifact — embeds all data plus the base64 photo.
 /dashboard.html
 
-# Personal media
-/assets/*.jpg
-/assets/*.jpeg
-/assets/*.png
+# Personal media — dog photos etc. stay local, anywhere in the repo
+*.jpg
+*.jpeg
+*.png
 
 # Python
 __pycache__/
