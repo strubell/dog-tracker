@@ -300,6 +300,7 @@
     <h2>Notes</h2>
     <div class="sub" id="notesSub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
     <ul class="notes" id="notes"></ul>
+    <button class="btn" id="notesToggle" style="display:none; margin-top:10px"></button>
   </div>
 
   <div class="card cond" id="vetCard" data-page="Nala Pepper" style="display:none">
@@ -867,16 +868,26 @@ function renderVet(dog) {
 }
 
 // ---- notes (filtered to the active dog) -------------------------------------------
+let notesShowAll = false;
+const NOTES_PREVIEW = 5;
 function renderNotes(dog) {
   const card = document.getElementById("notesCard");
-  const mine = DATA.notes.filter(n => (n.dog || cfg.dog) === dog);
+  const mine = DATA.notes.filter(n => (n.dog || cfg.dog) === dog).slice().reverse();
   card.style.display = (card.dataset.onpage !== "0" && mine.length) ? "" : "none";
   document.getElementById("notesSub").textContent = dog === cfg.dog
     ? "Stairs hesitation, paw-licking, stiffness, hunger strikes, etc."
     : "Appetite, gut, and anything else notable";
-  document.getElementById("notes").innerHTML = mine.slice().reverse().map(n =>
+  const shown = notesShowAll ? mine : mine.slice(0, NOTES_PREVIEW);
+  document.getElementById("notes").innerHTML = shown.map(n =>
     `<li><span class="d">${n.date}</span>` +
     `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>${esc(n.text)}</li>`).join("");
+  const btn = document.getElementById("notesToggle");
+  if (mine.length > NOTES_PREVIEW) {
+    btn.style.display = "";
+    btn.textContent = notesShowAll ? "Show fewer" : `Show all ${mine.length}`;
+  } else {
+    btn.style.display = "none";
+  }
 }
 
 // ---- Pepper: eating ---------------------------------------------------------------
@@ -992,6 +1003,8 @@ function renderDiarrhea(dog) {
     }
   s += `</svg>`;
   const el = document.getElementById("gimap"); el.innerHTML = s; bindTips(el);
+  // open on the most recent (right-most) days, not the oldest
+  requestAnimationFrame(() => { el.scrollLeft = el.scrollWidth; });
   document.getElementById("giSub").textContent =
     `Every recorded episode, by day · ${keys.length} affected days since ${first}`;
   document.getElementById("giLegend").innerHTML =
@@ -1048,7 +1061,9 @@ try { const saved = localStorage.getItem("dogPage"); if (saved && dogList.includ
 { const h = decodeURIComponent(location.hash.replace(/^#/, "")); if (dogList.includes(h)) activeDog = h; }
 
 function setPage(dog) {
+  const changed = dog !== activeDog;
   activeDog = dog;
+  if (changed) notesShowAll = false;
   try { localStorage.setItem("dogPage", dog); } catch (e) {}
   if (decodeURIComponent(location.hash.replace(/^#/, "")) !== dog) location.hash = dog;
   document.querySelectorAll("[data-page]").forEach(el => {
@@ -1068,6 +1083,7 @@ function setPage(dog) {
   renderNotes(dog);
   renderVet(dog);
   renderBreed(dog);
+  renderDiarrhea(dog);
   renderFeeding(dog);
   renderCumulative(dog);
   renderRecent(dog);
@@ -1085,9 +1101,10 @@ function setPage(dog) {
 document.getElementById("tabs").innerHTML = dogList
   .map(d => `<button class="tab" data-dog="${esc(d)}">${esc(d)}</button>`).join("");
 document.querySelectorAll("#tabs .tab").forEach(t => t.onclick = () => setPage(t.dataset.dog));
+document.getElementById("notesToggle").onclick = () => { notesShowAll = !notesShowAll; renderNotes(activeDog); };
 
 // render Pepper's panels for every non-primary dog (only Pepper for now)
-for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderDiarrhea(d); renderPepperKpis(d); }
+for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderPepperKpis(d); }
 
 // ---- live mode (served by `nala.py serve`) ----------------------------------------
 if (DATA.live) {
