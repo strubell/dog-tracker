@@ -13,6 +13,20 @@
     "Nala": "#0ca4b8",
     "Pepper": "#d9534f"
   },
+  "dna": {
+    "Nala": {
+      "test_date": "2021-01-05",
+      "ideal_weight_lb": [44, 73],
+      "breeds": [
+        {"name": "Labrador Retriever", "pct": 25},
+        {"name": "Airedale Terrier", "pct": 19},
+        {"name": "Siberian Husky", "pct": 8},
+        {"name": "Chow Chow", "pct": 6},
+        {"name": "Australian Cattle Dog", "pct": 5}
+      ],
+      "health": {"at_risk": [], "carrier": [], "clear": 210}
+    }
+  },
   "feeding": {
     "Nala": [
       {

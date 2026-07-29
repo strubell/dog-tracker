@@ -160,6 +160,12 @@
   ul.notes { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   ul.notes li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
   ul.notes .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  .breedbar { display: flex; height: 20px; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; }
+  .breedbar span { display: block; height: 100%; }
+  .breedlist { display: flex; flex-wrap: wrap; gap: 7px 20px; font-size: 14px; }
+  .breedlist .bi { display: flex; align-items: center; gap: 7px; }
+  .breedlist .dot { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .breedmeta { color: var(--ink-2); font-size: 13px; margin-top: 12px; }
   ol.vet { list-style: none; margin: 0; padding: 0; }
   ol.vet li { padding: 12px 0; border-bottom: 1px solid var(--grid); }
   ol.vet li:last-child { border-bottom: none; }
@@ -268,6 +274,14 @@
       <div class="sub" id="weightSub"></div>
       <div class="scroll" id="weightChart"></div>
     </div>
+  </div>
+
+  <div class="card cond" id="breedCard" data-page="Nala Pepper">
+    <h2>Breed mix</h2>
+    <div class="sub" id="breedSub">Wisdom Panel DNA</div>
+    <div class="breedbar" id="breedBar"></div>
+    <div class="breedlist" id="breedList"></div>
+    <div class="breedmeta" id="breedMeta"></div>
   </div>
 
   <div class="card" id="feedCard" data-page="Nala Pepper" style="margin-bottom:16px">
@@ -808,6 +822,33 @@ function renderFeeding(dog) {
     `<ul class="notes">${rows}</ul></div>`;
 }
 
+// ---- breed / DNA (per dog; from cfg.dna) ------------------------------------------
+const BREED_PAL = ["#5b8ff9", "#61ddaa", "#f6a35c", "#e8684a", "#9270ca", "#5ad8a6"];
+function renderBreed(dog) {
+  const card = document.getElementById("breedCard");
+  const dna = (cfg.dna || {})[dog];
+  if (!dna || !(dna.breeds || []).length) { card.style.display = "none"; return; }
+  if (card.dataset.onpage !== "0") card.style.display = "";
+  const breeds = dna.breeds;
+  const known = breeds.reduce((s, b) => s + b.pct, 0);
+  const other = Math.max(0, 100 - known);
+  const color = i => BREED_PAL[i % BREED_PAL.length];
+  document.getElementById("breedBar").innerHTML =
+    breeds.map((b, i) => `<span style="width:${b.pct}%;background:${color(i)}"></span>`).join("") +
+    (other > 0 ? `<span style="width:${other}%;background:var(--grid)"></span>` : "");
+  document.getElementById("breedList").innerHTML =
+    breeds.map((b, i) => `<span class="bi"><span class="dot" style="background:${color(i)}"></span>${b.pct}% ${esc(b.name)}</span>`).join("") +
+    (other > 0 ? `<span class="bi"><span class="dot" style="background:var(--grid)"></span>${other}% other</span>` : "");
+  const meta = [];
+  if (dna.ideal_weight_lb) meta.push(`Ideal weight ${dna.ideal_weight_lb[0]}–${dna.ideal_weight_lb[1]} lb`);
+  const h = dna.health || {};
+  const flags = [...(h.at_risk || []).map(x => "at risk: " + x), ...(h.carrier || []).map(x => "carrier: " + x)];
+  meta.push(flags.length ? flags.join(" · ") : "no genetic conditions flagged"
+            + (h.clear ? ` (${h.clear} clear)` : ""));
+  if (dna.test_date) meta.push(`tested ${dna.test_date}`);
+  document.getElementById("breedMeta").textContent = meta.join(" · ");
+}
+
 // ---- vet history (per dog; card hidden if that dog has no records) ----------------
 function renderVet(dog) {
   const card = document.getElementById("vetCard");
@@ -1026,6 +1067,7 @@ function setPage(dog) {
   else { row.appendChild(feed); feed.style.marginBottom = "0"; }
   renderNotes(dog);
   renderVet(dog);
+  renderBreed(dog);
   renderFeeding(dog);
   renderCumulative(dog);
   renderWeekly(dog);
