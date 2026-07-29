@@ -206,14 +206,14 @@
     <details class="tv"><summary>Table view</summary><div id="eatTable"></div></details>
   </div>
 
-  <div class="card" data-page="Nala">
+  <div class="card" data-page="Nala Pepper">
     <h2>This week's progress</h2>
     <div class="sub" id="cumSub"></div>
     <div class="scroll" id="cumChart"></div>
   </div>
 
-  <div class="card" data-page="Nala">
-    <h2>Weekly miles with the dogs</h2>
+  <div class="card" data-page="Nala Pepper">
+    <h2 id="weeklyTitle">Weekly miles</h2>
     <div class="sub">Logged outings, including daily “circle”</div>
     <div class="scroll" id="weeklyChart"></div>
     <div class="legend" id="weeklyLegend"></div>
@@ -315,29 +315,41 @@ function phaseFor(week) {
   return cfg.phases.find(p => week >= p.weeks[0] && (p.weeks[1] == null || week <= p.weeks[1]));
 }
 
-// ---- aggregates -----------------------------------------------------------
+// ---- aggregates (per dog) -------------------------------------------------
 const isRun = t => t.toLowerCase().includes("run");
-const byDay = {};      // localdate -> {min, mi, runMi, walkMi, names[]}
-for (const a of pets) {
-  const k = a.date.slice(0, 10);
-  (byDay[k] ??= { min: 0, mi: 0, runMi: 0, walkMi: 0, names: [] });
-  byDay[k].min += a.min; byDay[k].mi += a.mi; byDay[k].names.push(a.name);
-  byDay[k][isRun(a.type) ? "runMi" : "walkMi"] += a.mi;
-}
-for (const k of DATA.circles) {
-  (byDay[k] ??= { min: 0, mi: 0, runMi: 0, walkMi: 0, names: [] });
-  byDay[k].min += cfg.circle.min; byDay[k].mi += cfg.circle.mi;
-  byDay[k].walkMi += cfg.circle.mi;
-  byDay[k].names.push("Circle (baseline walk)");
-}
-function weekStats(monday) {
-  let mi = 0, min = 0, days = 0, runMi = 0, walkMi = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = byDay[localISO(addDays(monday, i))];
-    if (d) { mi += d.mi; min += d.min; days++; runMi += d.runMi; walkMi += d.walkMi; }
+// each dog's outings + their own circle days, bucketed by local date
+function aggFor(dog) {
+  const dpets = DATA.activities.filter(a => dogsOf(a)[dog] === true)
+                               .sort((a, b) => a.date < b.date ? -1 : 1);
+  const circ = (DATA.circlesByDog && DATA.circlesByDog[dog])
+            || (dog === cfg.dog ? (DATA.circles || []) : []);
+  const byDay = {};
+  for (const a of dpets) {
+    const k = a.date.slice(0, 10);
+    (byDay[k] ??= { min: 0, mi: 0, runMi: 0, walkMi: 0, names: [] });
+    byDay[k].min += a.min; byDay[k].mi += a.mi; byDay[k].names.push(a.name);
+    byDay[k][isRun(a.type) ? "runMi" : "walkMi"] += a.mi;
   }
-  return { mi, min, days, runMi, walkMi };
+  for (const k of circ) {
+    (byDay[k] ??= { min: 0, mi: 0, runMi: 0, walkMi: 0, names: [] });
+    byDay[k].min += cfg.circle.min; byDay[k].mi += cfg.circle.mi;
+    byDay[k].walkMi += cfg.circle.mi;
+    byDay[k].names.push("Circle (baseline walk)");
+  }
+  const weekStats = (monday) => {
+    let mi = 0, min = 0, days = 0, runMi = 0, walkMi = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = byDay[localISO(addDays(monday, i))];
+      if (d) { mi += d.mi; min += d.min; days++; runMi += d.runMi; walkMi += d.walkMi; }
+    }
+    return { mi, min, days, runMi, walkMi };
+  };
+  return { pets: dpets, circles: circ, byDay, weekStats };
 }
+// Nala's aggregate backs the Nala-only blocks (header KPIs, heatmap, recent)
+const nalaAgg = aggFor(cfg.dog);
+const byDay = nalaAgg.byDay;
+const weekStats = nalaAgg.weekStats;
 
 // ---- header ---------------------------------------------------------------
 {
@@ -420,15 +432,16 @@ function roundedTop(x, y, w, h, r) {
 }
 
 // ---- this-week cumulative step chart -----------------------------------------
-{
+function renderCumulative(dog) {
+  const agg = aggFor(dog);
   const weekStart = thisMonday, weekEnd = addDays(thisMonday, 7);
   const goal = cfg.weekly_miles_target[0], goalHi = cfg.weekly_miles_target[1];
   const incs = [];
-  for (const a of pets) {
+  for (const a of agg.pets) {
     const dt = new Date(a.date);
     if (dt >= weekStart && dt < weekEnd) incs.push({ t: +dt, mi: a.mi, label: a.name, run: isRun(a.type) });
   }
-  for (const k of DATA.circles) {
+  for (const k of agg.circles) {
     const dt = new Date(k + "T08:00:00");
     if (dt >= weekStart && dt < weekEnd) incs.push({ t: +dt, mi: cfg.circle.mi, label: "Circle (baseline walk)", run: false });
   }
@@ -498,12 +511,14 @@ function roundedTop(x, y, w, h, r) {
 }
 
 // ---- weekly miles chart ------------------------------------------------------
-{
+function renderWeekly(dog) {
+  const ws = aggFor(dog).weekStats;
+  document.getElementById("weeklyTitle").textContent = `Weekly miles with ${dog}`;
   const N = 26;
   const weeks = [];
   for (let i = N - 1; i >= 0; i--) {
     const mon = addDays(thisMonday, -i * 7);
-    weeks.push({ mon, ...weekStats(mon) });
+    weeks.push({ mon, ...ws(mon) });
   }
   const W = 940, H = 250, L = 34, R = 12, T = 14, B = 26;
   const plotW = W - L - R, plotH = H - T - B;
@@ -847,11 +862,19 @@ function renderPepperKpis(dog) {
       if (rec[m] === true) eaten++; else if (rec[m] === false) skipped++;
     }
   }
+  const ws = aggFor(dog).weekStats;
+  const cur = ws(thisMonday), lastWk = ws(addDays(thisMonday, -7));
+  const daysSoFar = Math.min(7, Math.floor((today - thisMonday) / DAY) + 1);
+  const avgMi = daysSoFar ? cur.mi / daysSoFar : 0;
+  const miDelta = cur.mi - lastWk.mi;
   document.getElementById("kpisPepper").innerHTML = `
     <div class="tile"><div class="label">Weight</div>
       <div class="value">${w ? w.lb.toFixed(1) : "—"}<small> lb</small></div>
       ${dw !== null && dw !== 0 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
       ${cfg.other_dog_targets_lb && cfg.other_dog_targets_lb[dog] ? `<div class="meta">target ${cfg.other_dog_targets_lb[dog][0]}–${cfg.other_dog_targets_lb[dog][1]} lb</div>` : ""}</div>
+    <div class="tile"><div class="label">Miles this week</div>
+      <div class="value">${cur.mi.toFixed(1)}<small> mi · </small>${avgMi.toFixed(1)}<small>/day</small></div>
+      <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDelta === 0 ? "same as last week" : `${miDelta > 0 ? "▲" : "▼"} ${Math.abs(miDelta).toFixed(1)} vs last week`}</div></div>
     <div class="tile"><div class="label">Meals this week</div>
       <div class="value">${eaten}<small> of 14</small></div>
       <div class="meta">last 7 days</div></div>
@@ -885,6 +908,8 @@ function setPage(dog) {
   else { row.appendChild(feed); feed.style.marginBottom = "0"; }
   renderNotes(dog);
   renderFeeding(dog);
+  renderCumulative(dog);
+  renderWeekly(dog);
   if (window.renderWeightHistory) renderWeightHistory(dog);
   document.getElementById("pageTitle").textContent =
     dog === cfg.dog ? "Nala's Comeback Plan" : `${dog}'s Health Log`;
