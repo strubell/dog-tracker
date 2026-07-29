@@ -665,27 +665,35 @@ def log_gi(dog, d, severity, blood, note=None):
     return entry
 
 
-# curated fields to surface per vet encounter (label, [synonym keys in priority])
+# curated fields to surface per vet encounter (label, [synonym keys in priority];
+# first present key wins). Pure billing/metadata keys are intentionally omitted.
 _VET_FIELDS = [
-    ("Complaints", ["presenting_complaints"]),
+    ("Complaints", ["presenting_complaints", "presenting_complaint"]),
     ("Onset", ["symptom_onset", "symptom_onset_dates"]),
+    ("Exam", ["physical_exam"]),
     ("Findings", ["findings"]),
     ("History", ["history_verbatim"]),
-    ("Assessment", ["assessment_as_transcribed", "assessment", "assessments"]),
-    ("Diagnostics", ["diagnostics"]),
-    ("Treatment", ["treatment", "medications"]),
-    ("Procedure", ["procedure", "procedures", "extractions"]),
-    ("Plan", ["plan_verbatim", "plan", "plan_summary"]),
+    ("Assessment", ["working_diagnosis_verbatim", "assessment_as_transcribed",
+                    "assessment", "assessments", "diagnosis_status"]),
+    ("Diagnostics", ["diagnostics_performed", "diagnostics"]),
+    ("Procedure", ["procedure", "procedures", "extractions", "extraction_detail"]),
+    ("Treatment", ["treatment", "treatment_as_transcribed", "medications",
+                   "medications_dispensed", "take_home_medication"]),
+    ("Plan", ["plan_verbatim", "plan_verbatim_key_points", "plan", "plan_summary",
+              "clinic_guidance_summary"]),
+    ("Follow-up", ["follow_up_instruction_verbatim", "monitoring_instructions",
+                   "discharge_instructions", "follow_up_due"]),
     ("Outcome", ["outcome"]),
-    ("Note", ["significance"]),
+    ("Cost", ["cost_total_usd"]),
+    ("Note", ["significance", "note"]),
 ]
 
 
 def _vet_val(v):
-    if isinstance(v, list):
-        return "; ".join(str(x) for x in v)
     if isinstance(v, dict):
-        return "; ".join(f"{k}: {val}" for k, val in v.items())
+        return ", ".join(f"{k}: {_vet_val(val)}" for k, val in v.items())
+    if isinstance(v, list):
+        return "; ".join(_vet_val(x) for x in v)
     return str(v)
 
 
@@ -706,7 +714,10 @@ def load_vet(cfg):
             for label, keys in _VET_FIELDS:
                 for k in keys:
                     if e.get(k):
-                        lines.append({"label": label, "text": _vet_val(e[k])})
+                        text = _vet_val(e[k])
+                        if label == "Cost":
+                            text = "$" + text
+                        lines.append({"label": label, "text": text})
                         break
             items.append({
                 "date": e.get("date"),
