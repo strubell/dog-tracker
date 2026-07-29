@@ -616,6 +616,10 @@ def _gi_day_map(path):
             for k in span(e["date_onset"], e.get("date_resolved"), e.get("duration_days")):
                 days[k] = {"lvl": lvl, "sev": e.get("severity"),
                            "trig": e.get("suspected_trigger")}
+    # documented-parasite findings get their own status (marked last)
+    for e in raw.get("episodes", []):
+        if e.get("type") == "parasite_finding" and e.get("date"):
+            days[e["date"]] = {"lvl": "parasite", "note": e.get("finding")}
     return days
 
 

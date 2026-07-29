@@ -21,7 +21,7 @@
     --ramp-0: transparent; --ramp-1: #b7d3f6; --ramp-2: #86b6ef; --ramp-3: #5598e7;
     --ramp-4: #2a78d6; --ramp-5: #1c5cab; --ramp-6: #0d366b;
     --eat-0: #f3c9c4; --eat-1: #f6e0ad; --eat-2: #c4e2ba;
-    --gi-acute: #d9534f; --gi-chronic: #f1c6c1;
+    --gi-acute: #d9534f; --gi-chronic: #f1c6c1; --gi-parasite: #8a6fc0;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -43,7 +43,7 @@
       --ramp-1: #184f95; --ramp-2: #1c5cab; --ramp-3: #256abf;
       --ramp-4: #3987e5; --ramp-5: #6da7ec; --ramp-6: #9ec5f4;
       --eat-0: #6e4340; --eat-1: #6f6238; --eat-2: #45643f;
-      --gi-acute: #c2504b; --gi-chronic: #6e433f;
+      --gi-acute: #c2504b; --gi-chronic: #6e433f; --gi-parasite: #7862a6;
     }
   }
   * { box-sizing: border-box; }
@@ -893,12 +893,15 @@ function renderDiarrhea(dog) {
       const d = addDays(firstMon, c * 7 + r);
       if (d > today) continue;
       const rec = data[localISO(d)];
-      const fill = rec ? (rec.lvl === "chronic" ? "var(--gi-chronic)" : "var(--gi-acute)") : "var(--surface)";
+      const fill = rec ? `var(--gi-${rec.lvl})` : "var(--surface)";
       const x = left + c * (cell + gap), y = top + r * (cell + gap);
       let attrs = "";
       if (rec) {
-        const t = `<b>${fmtDay(d)} ${d.getFullYear()}</b>${esc(rec.sev || rec.lvl)} diarrhea`
-                + (rec.trig && rec.trig !== "unknown" ? `<br>trigger: ${esc(rec.trig)}` : "");
+        const head = `<b>${fmtDay(d)} ${d.getFullYear()}</b>`;
+        const t = rec.lvl === "parasite"
+          ? head + "documented parasite" + (rec.note ? `<br>${esc(rec.note)}` : "")
+          : head + `${esc(rec.sev || rec.lvl)} diarrhea`
+              + (rec.trig && rec.trig !== "unknown" ? `<br>trigger: ${esc(rec.trig)}` : "");
         attrs = ` data-tip="${esc(t)}"`;
       }
       s += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${fill}"` +
@@ -911,7 +914,8 @@ function renderDiarrhea(dog) {
     `Every recorded episode, by day · ${keys.length} affected days since ${keys.reduce((a, b) => a < b ? a : b)}`;
   document.getElementById("giLegend").innerHTML =
     `<span>diarrhea:</span><span class="sw" style="background:var(--gi-acute)"></span><span>episode</span>` +
-    `<span class="sw" style="background:var(--gi-chronic)"></span><span>chronic low-grade</span>`;
+    `<span class="sw" style="background:var(--gi-chronic)"></span><span>chronic low-grade</span>` +
+    `<span class="sw" style="background:var(--gi-parasite)"></span><span>documented parasite</span>`;
 }
 
 function renderPepperKpis(dog) {
