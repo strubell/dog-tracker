@@ -213,7 +213,7 @@
 
   <div class="card" id="eatingCard" data-page="Pepper">
     <h2>Eating</h2>
-    <div class="sub">Meals eaten each day (0/1/2) since plan start · ◆ = something different/new</div>
+    <div class="sub">Meals eaten each day, plus anything new.</div>
     <div class="scroll" id="eatmap"></div>
     <div class="legend" id="eatLegend"></div>
     <div id="mealLog"></div>
@@ -818,7 +818,7 @@ function renderEating(dog) {
     s += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
   for (let w = 1; w <= endWeek; w++) {
     const mon = addDays(planStart, (w - 1) * 7), yr = top + (w - 1) * (cell + gap);
-    s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}">W${w}</text>`;
+    s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}">${fmtDay(mon)}</text>`;
     for (let i = 0; i < 7; i++) {
       const d = addDays(mon, i), k = localISO(d), x = left + i * (cell + gap);
       const future = d > today, rec = meals[k], n = mealCount(rec);
