@@ -190,7 +190,7 @@
 
   <div class="card cond" id="reviewCard" data-page="Nala" style="display:none">
     <h2 id="reviewTitle"></h2>
-    <div class="sub">Strava's API doesn't share the “with pet” tag, so confirm each dog here</div>
+    <div class="sub">Tap the dog(s) that came along (or Neither), then Confirm</div>
     <div id="reviewList"></div>
   </div>
 
@@ -938,10 +938,10 @@ if (DATA.live) {
     return `<span class="d">${isToday ? "Today" : fmtISO(k)}</span>Circle walk${isToday ? " today" : ""}?`;
   };
 
-  // one row per activity/circle; pick which dogs (both preselected) or Neither
+  // one row per activity/circle; tap the dogs that came (color in), or Neither
   const reviewRow = (kind, key, infoHTML) => {
     const toggles = dogList.map(d =>
-      `<button class="btn dogtog sel" data-dog="${esc(d)}">${esc(d)}</button>`).join("");
+      `<button class="btn dogtog" data-dog="${esc(d)}">${esc(d)}</button>`).join("");
     return `<div class="review-item" data-kind="${kind}" data-key="${esc(String(key))}">
       <div class="info">${infoHTML}</div>
       <div class="acts">${toggles}<button class="btn neither">Neither</button>
