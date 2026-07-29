@@ -665,6 +665,62 @@ def log_gi(dog, d, severity, blood, note=None):
     return entry
 
 
+# curated fields to surface per vet encounter (label, [synonym keys in priority])
+_VET_FIELDS = [
+    ("Complaints", ["presenting_complaints"]),
+    ("Onset", ["symptom_onset", "symptom_onset_dates"]),
+    ("Findings", ["findings"]),
+    ("History", ["history_verbatim"]),
+    ("Assessment", ["assessment_as_transcribed", "assessment", "assessments"]),
+    ("Diagnostics", ["diagnostics"]),
+    ("Treatment", ["treatment", "medications"]),
+    ("Procedure", ["procedure", "procedures", "extractions"]),
+    ("Plan", ["plan_verbatim", "plan", "plan_summary"]),
+    ("Outcome", ["outcome"]),
+    ("Note", ["significance"]),
+]
+
+
+def _vet_val(v):
+    if isinstance(v, list):
+        return "; ".join(str(x) for x in v)
+    if isinstance(v, dict):
+        return "; ".join(f"{k}: {val}" for k, val in v.items())
+    return str(v)
+
+
+def load_vet(cfg):
+    """Per-dog vet encounter timeline from data/<dog>_vet_records.json."""
+    out = {}
+    for d in dog_names(cfg):
+        p = DATA / f"{d.lower()}_vet_records.json"
+        if not p.exists():
+            continue
+        try:
+            raw = json.loads(p.read_text())
+        except Exception:
+            continue
+        items = []
+        for e in raw.get("encounters", []):
+            lines = []
+            for label, keys in _VET_FIELDS:
+                for k in keys:
+                    if e.get(k):
+                        lines.append({"label": label, "text": _vet_val(e[k])})
+                        break
+            items.append({
+                "date": e.get("date"),
+                "provider": e.get("provider"),
+                "type": e.get("type"),
+                "weight": e.get("weight_lb"),
+                "lines": lines,
+            })
+        items.sort(key=lambda x: (x["date"] or ""), reverse=True)
+        if items:
+            out[d] = items
+    return out
+
+
 def load_gi(cfg):
     """Merge each dog's compiled history with any incidents logged here."""
     days, table = {}, {}
@@ -714,6 +770,7 @@ def build_payload(cfg, db):
         "notes": load(NOTES, []),
         "meals": load(MEALS, {}),
         "gi": load_gi(cfg),
+        "vet": load_vet(cfg),
         "generated": datetime.now(tz()).isoformat(timespec="minutes"),
     }
 

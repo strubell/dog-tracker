@@ -160,6 +160,13 @@
   ul.notes { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   ul.notes li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
   ul.notes .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  ol.vet { list-style: none; margin: 0; padding: 0; }
+  ol.vet li { padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  ol.vet li:last-child { border-bottom: none; }
+  ol.vet .vh { font-weight: 600; font-size: 15px; }
+  ol.vet .vmeta { color: var(--ink-2); font-size: 13px; margin: 1px 0 6px; }
+  ol.vet .vline { font-size: 13px; line-height: 1.45; margin: 2px 0; }
+  ol.vet .vline b { color: var(--ink-2); }
   .dogtag { display: inline-block; font-size: 11px; font-weight: 700; color: #fff;
             padding: 1px 8px; border-radius: 999px; margin-right: 8px; vertical-align: 1px; }
 
@@ -279,6 +286,12 @@
     <h2>Notes</h2>
     <div class="sub" id="notesSub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
     <ul class="notes" id="notes"></ul>
+  </div>
+
+  <div class="card cond" id="vetCard" data-page="Nala Pepper" style="display:none">
+    <h2>Vet history</h2>
+    <div class="sub" id="vetSub">Documented visits, newest first</div>
+    <ol class="vet" id="vetList"></ol>
   </div>
 </div>
 <div id="tip"></div>
@@ -795,6 +808,23 @@ function renderFeeding(dog) {
     `<ul class="notes">${rows}</ul></div>`;
 }
 
+// ---- vet history (per dog; card hidden if that dog has no records) ----------------
+function renderVet(dog) {
+  const card = document.getElementById("vetCard");
+  const items = (DATA.vet || {})[dog] || [];
+  card.style.display = (card.dataset.onpage !== "0" && items.length) ? "" : "none";
+  document.getElementById("vetSub").textContent =
+    `Documented visits, newest first · ${items.length} on record`;
+  document.getElementById("vetList").innerHTML = items.map(e => {
+    const head = `<div class="vh"><b>${e.date || ""}</b>${e.type ? " · " + esc(e.type) : ""}</div>`;
+    const meta = (e.provider || e.weight != null)
+      ? `<div class="vmeta">${esc(e.provider || "")}${e.weight != null ? " · " + e.weight + " lb" : ""}</div>` : "";
+    const lines = (e.lines || []).map(l =>
+      `<div class="vline"><b>${esc(l.label)}:</b> ${esc(l.text)}</div>`).join("");
+    return `<li>${head}${meta}${lines}</li>`;
+  }).join("");
+}
+
 // ---- notes (filtered to the active dog) -------------------------------------------
 function renderNotes(dog) {
   const card = document.getElementById("notesCard");
@@ -995,6 +1025,7 @@ function setPage(dog) {
   if (dog === cfg.dog) { row.after(feed); feed.style.marginBottom = "16px"; }
   else { row.appendChild(feed); feed.style.marginBottom = "0"; }
   renderNotes(dog);
+  renderVet(dog);
   renderFeeding(dog);
   renderCumulative(dog);
   renderWeekly(dog);
