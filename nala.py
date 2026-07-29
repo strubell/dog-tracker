@@ -582,6 +582,55 @@ def cmd_meal(args):
 
 # ---------------------------------------------------------------- build
 
+def _gi_day_map(path):
+    """Expand a dog's GI-history episodes into a {date: {lvl,sev,trig}} map.
+    Acute episodes override chronic-phase days on overlap."""
+    import re
+    raw = json.loads(Path(path).read_text())
+
+    def span(onset, resolved, dur):
+        o = date.fromisoformat(onset)
+        end = None
+        if resolved:
+            m = re.match(r"(\d{4}-\d{2}-\d{2})", str(resolved))
+            if m:
+                end = date.fromisoformat(m.group(1))
+        if end is None and dur:
+            end = o + timedelta(days=int(dur) - 1)
+        end = end or o
+        out, d = [], o
+        while d <= end:
+            out.append(d.isoformat())
+            d += timedelta(days=1)
+        return out
+
+    days = {}
+    for want in ("chronic_phase", "episode"):   # chronic first so acute wins
+        for e in raw.get("episodes", []):
+            t = e.get("type")
+            if t == "parasite_finding" or not e.get("date_onset"):
+                continue
+            lvl = "chronic" if t == "chronic_phase" else "acute"
+            if (want == "chronic_phase") != (lvl == "chronic"):
+                continue
+            for k in span(e["date_onset"], e.get("date_resolved"), e.get("duration_days")):
+                days[k] = {"lvl": lvl, "sev": e.get("severity"),
+                           "trig": e.get("suspected_trigger")}
+    return days
+
+
+def load_gi(cfg):
+    out = {}
+    for d in dog_names(cfg):
+        p = DATA / f"{d.lower()}_gi_history.json"
+        if p.exists():
+            try:
+                out[d] = _gi_day_map(p)
+            except Exception:
+                pass
+    return out
+
+
 def build_payload(cfg, db):
     keep = [r for r in db.values() if r["pet"] is not False]
     keep.sort(key=lambda r: r["date"])
@@ -603,6 +652,7 @@ def build_payload(cfg, db):
         "weight": load(WEIGHT, []),
         "notes": load(NOTES, []),
         "meals": load(MEALS, {}),
+        "gi": load_gi(cfg),
         "generated": datetime.now(tz()).isoformat(timespec="minutes"),
     }
 

@@ -21,6 +21,7 @@
     --ramp-0: transparent; --ramp-1: #b7d3f6; --ramp-2: #86b6ef; --ramp-3: #5598e7;
     --ramp-4: #2a78d6; --ramp-5: #1c5cab; --ramp-6: #0d366b;
     --eat-0: #f3c9c4; --eat-1: #f6e0ad; --eat-2: #c4e2ba;
+    --gi-acute: #d9534f; --gi-chronic: #f1c6c1;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -42,6 +43,7 @@
       --ramp-1: #184f95; --ramp-2: #1c5cab; --ramp-3: #256abf;
       --ramp-4: #3987e5; --ramp-5: #6da7ec; --ramp-6: #9ec5f4;
       --eat-0: #6e4340; --eat-1: #6f6238; --eat-2: #45643f;
+      --gi-acute: #c2504b; --gi-chronic: #6e433f;
     }
   }
   * { box-sizing: border-box; }
@@ -218,6 +220,13 @@
     <div class="legend" id="eatLegend"></div>
     <div id="mealLog"></div>
     <details class="tv"><summary>Table view</summary><div id="eatTable"></div></details>
+  </div>
+
+  <div class="card" id="giCard" data-page="Pepper">
+    <h2>Diarrhea</h2>
+    <div class="sub" id="giSub">Every recorded episode, by day</div>
+    <div class="scroll" id="gimap"></div>
+    <div class="legend" id="giLegend"></div>
   </div>
 
   <div class="duo" data-page="Nala" style="margin-bottom:16px">
@@ -855,6 +864,56 @@ function renderEating(dog) {
     : `<div class="sub">No meals logged yet.</div>`;
 }
 
+// ---- Pepper: diarrhea calendar (GitHub-contributions style, multi-year) ----------
+function renderDiarrhea(dog) {
+  const card = document.getElementById("giCard");
+  const data = (DATA.gi || {})[dog] || {};
+  const keys = Object.keys(data);
+  if (!keys.length) { card.style.display = "none"; return; }
+  if (card.dataset.onpage !== "0") card.style.display = "";
+  const firstMon = mondayOf(new Date(keys.reduce((a, b) => a < b ? a : b) + "T00:00:00"));
+  const weeks = Math.floor((today - firstMon) / WEEK) + 1;
+  const cell = 11, gap = 3, top = 30, left = 26;
+  const W = left + weeks * (cell + gap) + 4, H = top + 7 * (cell + gap) + 4;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Diarrhea episodes by day">`;
+  ["M", "W", "F"].forEach((c, i) =>
+    s += `<text x="${left - 6}" y="${top + (i * 2) * (cell + gap) + cell}" text-anchor="end" font-size="9">${c}</text>`);
+  let lastMonth = -1, lastYear = -1;
+  for (let c = 0; c < weeks; c++) {
+    const mon = addDays(firstMon, c * 7), m = mon.getMonth(), yr = mon.getFullYear();
+    if (m !== lastMonth) {
+      lastMonth = m;
+      const lbl = mon.toLocaleDateString(undefined, { month: "short" }) + (yr !== lastYear ? ` ’${String(yr).slice(2)}` : "");
+      lastYear = yr;
+      s += `<text x="${left + c * (cell + gap)}" y="${top - 12}" font-size="10">${lbl}</text>`;
+    }
+  }
+  for (let c = 0; c < weeks; c++)
+    for (let r = 0; r < 7; r++) {
+      const d = addDays(firstMon, c * 7 + r);
+      if (d > today) continue;
+      const rec = data[localISO(d)];
+      const fill = rec ? (rec.lvl === "chronic" ? "var(--gi-chronic)" : "var(--gi-acute)") : "var(--surface)";
+      const x = left + c * (cell + gap), y = top + r * (cell + gap);
+      let attrs = "";
+      if (rec) {
+        const t = `<b>${fmtDay(d)} ${d.getFullYear()}</b>${esc(rec.sev || rec.lvl)} diarrhea`
+                + (rec.trig && rec.trig !== "unknown" ? `<br>trigger: ${esc(rec.trig)}` : "");
+        attrs = ` data-tip="${esc(t)}"`;
+      }
+      s += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${fill}"` +
+           ` stroke="var(--grid)" stroke-width="0.5"${attrs}/>`;
+    }
+  s += `</svg>`;
+  const el = document.getElementById("gimap"); el.innerHTML = s; bindTips(el);
+  const eps = Object.values(data).filter(v => v.lvl === "acute").length;
+  document.getElementById("giSub").textContent =
+    `Every recorded episode, by day · ${keys.length} affected days since ${keys.reduce((a, b) => a < b ? a : b)}`;
+  document.getElementById("giLegend").innerHTML =
+    `<span>diarrhea:</span><span class="sw" style="background:var(--gi-acute)"></span><span>episode</span>` +
+    `<span class="sw" style="background:var(--gi-chronic)"></span><span>chronic low-grade</span>`;
+}
+
 function renderPepperKpis(dog) {
   const meals = mealsFor(dog);
   const wl = DATA.weight.filter(e => e.dog === dog).sort((a, b) => a.date < b.date ? -1 : 1);
@@ -930,7 +989,7 @@ document.getElementById("tabs").innerHTML = dogList
 document.querySelectorAll("#tabs .tab").forEach(t => t.onclick = () => setPage(t.dataset.dog));
 
 // render Pepper's panels for every non-primary dog (only Pepper for now)
-for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderPepperKpis(d); }
+for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderDiarrhea(d); renderPepperKpis(d); }
 
 // ---- live mode (served by `nala.py serve`) ----------------------------------------
 if (DATA.live) {

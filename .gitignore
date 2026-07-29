@@ -17,3 +17,6 @@
 # Python
 __pycache__/
 *.pyc
+
+# GI / health history exports (local only)
+*_gi_history.json
