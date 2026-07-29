@@ -868,16 +868,15 @@ function renderPepperKpis(dog) {
   const avgMi = daysSoFar ? cur.mi / daysSoFar : 0;
   const miDelta = cur.mi - lastWk.mi;
   document.getElementById("kpisPepper").innerHTML = `
+    <div class="tile"><div class="label">Days active</div>
+      <div class="value">${cur.days}<small> of 7</small></div></div>
+    <div class="tile"><div class="label">Miles this week</div>
+      <div class="value">${cur.mi.toFixed(1)}<small> mi · </small>${avgMi.toFixed(1)}<small>/day</small></div>
+      <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDelta === 0 ? "same as last week" : `${miDelta > 0 ? "▲" : "▼"} ${Math.abs(miDelta).toFixed(1)} vs last week`}</div></div>
     <div class="tile"><div class="label">Weight</div>
       <div class="value">${w ? w.lb.toFixed(1) : "—"}<small> lb</small></div>
       ${dw !== null && dw !== 0 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
       ${cfg.other_dog_targets_lb && cfg.other_dog_targets_lb[dog] ? `<div class="meta">target ${cfg.other_dog_targets_lb[dog][0]}–${cfg.other_dog_targets_lb[dog][1]} lb</div>` : ""}</div>
-    <div class="tile"><div class="label">Miles this week</div>
-      <div class="value">${cur.mi.toFixed(1)}<small> mi · </small>${avgMi.toFixed(1)}<small>/day</small></div>
-      <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDelta === 0 ? "same as last week" : `${miDelta > 0 ? "▲" : "▼"} ${Math.abs(miDelta).toFixed(1)} vs last week`}</div></div>
-    <div class="tile"><div class="label">Meals this week</div>
-      <div class="value">${eaten}<small> of 14</small></div>
-      <div class="meta">last 7 days</div></div>
     <div class="tile"><div class="label">Skipped meals</div>
       <div class="value">${skipped}</div>
       <div class="delta ${skipped ? "bad" : "good"}">${skipped ? "this week" : "none this week"}</div></div>`;
