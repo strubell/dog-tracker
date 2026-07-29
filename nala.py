@@ -675,7 +675,10 @@ def cmd_serve(args):
                         return self._send(404, json.dumps({"error": "unknown id"}))
                     rec = db[aid]
                     dogs = dict(rec.get("dogs") or {d: None for d in dog_names(cfg)})
-                    if body.get("dog"):
+                    if isinstance(body.get("dogs"), dict):
+                        for dg, v in body["dogs"].items():
+                            dogs[dg] = bool(v)
+                    elif body.get("dog"):
                         dogs[body["dog"]] = bool(body["value"])
                     else:
                         dogs = {d: bool(body["value"]) for d in dog_names(cfg)}
@@ -686,7 +689,10 @@ def cmd_serve(args):
                 if self.path == "/api/circle":
                     ans = load(CIRCLES, {})
                     entry = ans.setdefault(body["date"], {})
-                    if body.get("dog"):
+                    if isinstance(body.get("dogs"), dict):
+                        for dg, v in body["dogs"].items():
+                            entry[dg] = bool(v)
+                    elif body.get("dog"):
                         entry[body["dog"]] = bool(body["value"])
                     else:
                         for d in dog_names(cfg):

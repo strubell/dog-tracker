@@ -925,29 +925,27 @@ if (DATA.live) {
     { weekday: "short", month: "short", day: "numeric" });
   const todayISO = localISO(today);
 
-  // one row per (activity, dog) still needing a yes/no for that dog
-  const activityRows = (a) => {
+  const activityInfo = (a) => {
     const far = a.latlng && cfg.home_latlng
       ? Math.hypot((a.latlng[0] - cfg.home_latlng[0]) * 69,
                    (a.latlng[1] - cfg.home_latlng[1]) * 69 * Math.cos(cfg.home_latlng[0] * Math.PI / 180)) : 0;
     const flag = far > (cfg.home_radius_mi || 15) ? ` <span class="flag">⚑ ~${Math.round(far)} mi from home</span>` : "";
-    const dogs = a.dogs || {};
-    return dogList.filter(d => dogs[d] === null || dogs[d] === undefined).map(dog =>
-      `<div class="review-item" data-kind="activity" data-id="${a.id}" data-dog="${esc(dog)}">
-        <div class="info"><span class="d">${a.date.slice(0, 10)}</span>${esc(a.name)}
-          <span class="d"> · ${esc(a.type)} · ${a.min} min · ${a.mi.toFixed(1)} mi</span>${flag}</div>
-        <div class="acts"><button class="btn yes">With ${esc(dog)}</button>
-          <button class="btn no">Not ${esc(dog)}</button></div></div>`);
+    return `<span class="d">${a.date.slice(0, 10)}</span>${esc(a.name)}` +
+           `<span class="d"> · ${esc(a.type)} · ${a.min} min · ${a.mi.toFixed(1)} mi</span>${flag}`;
+  };
+  const circleInfo = (k) => {
+    const isToday = k === todayISO;
+    return `<span class="d">${isToday ? "Today" : fmtISO(k)}</span>Circle walk${isToday ? " today" : ""}?`;
   };
 
-  const circleRow = (dog, k) => {
-    const isToday = k === todayISO;
-    const q = isToday ? `Has ${esc(dog)} done the circle today?` : `Did ${esc(dog)} do the circle?`;
-    return `<div class="review-item" data-kind="circle" data-date="${k}" data-dog="${esc(dog)}">
-      <div class="info"><span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>
-        <span class="d">${isToday ? "Today" : fmtISO(k)}</span>${q}</div>
-      <div class="acts"><button class="btn yes">Yes</button>
-        <button class="btn no">No</button></div></div>`;
+  // one row per activity/circle; pick which dogs (both preselected) or Neither
+  const reviewRow = (kind, key, infoHTML) => {
+    const toggles = dogList.map(d =>
+      `<button class="btn dogtog sel" data-dog="${esc(d)}">${esc(d)}</button>`).join("");
+    return `<div class="review-item" data-kind="${kind}" data-key="${esc(String(key))}">
+      <div class="info">${infoHTML}</div>
+      <div class="acts">${toggles}<button class="btn neither">Neither</button>
+        <button class="btn primary confirm">Confirm</button></div></div>`;
   };
 
   const showReview = (title, rows) => {
@@ -955,23 +953,46 @@ if (DATA.live) {
     list.innerHTML = rows.join("");
     card.style.display = "";
     card.dataset.onpage = "1";
-    list.querySelectorAll(".review-item[data-kind]").forEach(item => {
-      const [yes, no] = item.querySelectorAll("button");
-      const handle = async (value) => {
-        yes.disabled = no.disabled = true;
-        try {
-          const d = item.dataset;
-          if (d.kind === "activity")
-            await post("/api/classify", { id: d.id, dog: d.dog, value });
-          else
-            await post("/api/circle", { date: d.date, dog: d.dog, value });
-          item.style.opacity = "0.4";
-          if (![...list.querySelectorAll(".review-item[data-kind]")].some(i => i.style.opacity !== "0.4"))
-            { flash("All confirmed — reloading…"); setTimeout(() => location.reload(), 700); }
-        } catch (e) { flash("Failed: " + e.message, 4000); yes.disabled = no.disabled = false; }
+    list.querySelectorAll(".review-item").forEach(item => {
+      const dogBtns = [...item.querySelectorAll(".dogtog")];
+      const neither = item.querySelector(".neither");
+      const confirm = item.querySelector(".confirm");
+      const paint = () => {
+        for (const b of dogBtns) {
+          const on = b.classList.contains("sel");
+          b.style.background = on ? dogColor(b.dataset.dog) : "";
+          b.style.color = on ? "#fff" : ""; b.style.borderColor = on ? "transparent" : "";
+        }
+        const none = neither.classList.contains("sel");
+        neither.style.background = none ? "var(--ink-2)" : "";
+        neither.style.color = none ? "#fff" : ""; neither.style.borderColor = none ? "transparent" : "";
       };
-      yes.onclick = () => handle(true);
-      no.onclick = () => handle(false);
+      for (const b of dogBtns) b.onclick = () => {
+        b.classList.toggle("sel");
+        if (b.classList.contains("sel")) neither.classList.remove("sel");
+        paint();
+      };
+      neither.onclick = () => {
+        neither.classList.toggle("sel");
+        if (neither.classList.contains("sel")) dogBtns.forEach(b => b.classList.remove("sel"));
+        paint();
+      };
+      confirm.onclick = async () => {
+        if (!dogBtns.some(b => b.classList.contains("sel")) && !neither.classList.contains("sel"))
+          return flash("Pick " + dogList.join(", ") + ", or Neither");
+        const dogs = {};
+        for (const b of dogBtns) dogs[b.dataset.dog] = b.classList.contains("sel");
+        confirm.disabled = true;
+        try {
+          const { kind, key } = item.dataset;
+          if (kind === "activity") await post("/api/classify", { id: key, dogs });
+          else await post("/api/circle", { date: key, dogs });
+          item.style.opacity = "0.4";
+          if (![...list.querySelectorAll(".review-item")].some(i => i.style.opacity !== "0.4"))
+            { flash("All confirmed — reloading…"); setTimeout(() => location.reload(), 700); }
+        } catch (e) { flash("Failed: " + e.message, 4000); confirm.disabled = false; }
+      };
+      paint();
     });
   };
 
@@ -981,8 +1002,9 @@ if (DATA.live) {
     try {
       const r = await post("/api/sync");
       const acts = r.activities || [], byDog = r.circlesByDog || {};
-      const actRows = acts.flatMap(activityRows);
-      const circRows = dogList.flatMap(d => (byDog[d] || []).map(k => circleRow(d, k)));
+      const actRows = acts.filter(a => a.pet === null).map(a => reviewRow("activity", a.id, activityInfo(a)));
+      const circDays = [...new Set(dogList.flatMap(d => byDog[d] || []))].sort();
+      const circRows = circDays.map(k => reviewRow("circle", k, circleInfo(k)));
       const asks = actRows.length + circRows.length;
       if (!asks) {
         flash(r.new ? `${r.new} new outing(s) pulled — reloading…` : "Up to date — reloading…");
@@ -1047,7 +1069,7 @@ if (DATA.live) {
 
   const unc = DATA.unclassified || [];
   if (unc.length)
-    showReview(`Needs your confirmation`, unc.flatMap(activityRows));
+    showReview(`Needs your confirmation`, unc.map(a => reviewRow("activity", a.id, activityInfo(a))));
 }
 
 setPage(activeDog);
