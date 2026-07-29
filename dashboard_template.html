@@ -21,7 +21,8 @@
     --ramp-0: transparent; --ramp-1: #b7d3f6; --ramp-2: #86b6ef; --ramp-3: #5598e7;
     --ramp-4: #2a78d6; --ramp-5: #1c5cab; --ramp-6: #0d366b;
     --eat-0: #f3c9c4; --eat-1: #f6e0ad; --eat-2: #c4e2ba;
-    --gi-acute: #d9534f; --gi-chronic: #f1c6c1; --gi-parasite: #8a6fc0;
+    --gi-mild: #f0c4be; --gi-moderate: #dd8a82; --gi-severe: #bf3b2e;
+    --gi-chronic: #f7ddda; --gi-parasite: #8a6fc0;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -43,7 +44,8 @@
       --ramp-1: #184f95; --ramp-2: #1c5cab; --ramp-3: #256abf;
       --ramp-4: #3987e5; --ramp-5: #6da7ec; --ramp-6: #9ec5f4;
       --eat-0: #6e4340; --eat-1: #6f6238; --eat-2: #45643f;
-      --gi-acute: #c2504b; --gi-chronic: #6e433f; --gi-parasite: #7862a6;
+      --gi-mild: #6b423e; --gi-moderate: #8a4a43; --gi-severe: #a5382c;
+      --gi-chronic: #4a2f2c; --gi-parasite: #7862a6;
     }
   }
   * { box-sizing: border-box; }
@@ -90,10 +92,10 @@
          border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); cursor: pointer; }
   .tab:hover { background: var(--band); }
   .tab.active { color: #fff; border-color: transparent; }
-  #mealLog { display: none; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 14px; }
-  #mealLog.on { display: flex; }
-  #mealLog .mgrp { display: flex; gap: 6px; align-items: center; }
-  #mealLog .mgrp .lbl { color: var(--ink-2); font-weight: 600; }
+  #mealLog, #giLog { display: none; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 14px; }
+  #mealLog.on, #giLog.on { display: flex; }
+  #mealLog .mgrp, #giLog .mgrp { display: flex; gap: 6px; align-items: center; }
+  #mealLog .mgrp .lbl, #giLog .mgrp .lbl { color: var(--ink-2); font-weight: 600; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
            background: var(--ink); color: var(--page); padding: 9px 16px; border-radius: 8px;
            font-size: 14px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
@@ -227,6 +229,8 @@
     <div class="sub" id="giSub">Every recorded episode, by day</div>
     <div class="scroll" id="gimap"></div>
     <div class="legend" id="giLegend"></div>
+    <div id="giLog"></div>
+    <details class="tv"><summary>Log entries</summary><div id="giTable"></div></details>
   </div>
 
   <div class="duo" data-page="Nala" style="margin-bottom:16px">
@@ -865,13 +869,20 @@ function renderEating(dog) {
 }
 
 // ---- Pepper: diarrhea calendar (GitHub-contributions style, multi-year) ----------
+// color = severity (mild/moderate/severe), chronic low-grade faint, parasite
+// violet; a ◆ marks days blood was noted.
+const giFill = rec => rec.lvl === "parasite" ? "var(--gi-parasite)"
+                    : rec.lvl === "chronic" ? "var(--gi-chronic)"
+                    : `var(--gi-${rec.sev})`;
 function renderDiarrhea(dog) {
   const card = document.getElementById("giCard");
-  const data = (DATA.gi || {})[dog] || {};
-  const keys = Object.keys(data);
-  if (!keys.length) { card.style.display = "none"; return; }
+  const days = ((DATA.gi || {}).days || {})[dog] || {};
+  const rows = ((DATA.gi || {}).table || {})[dog] || [];
+  const keys = Object.keys(days);
+  if (!keys.length && !rows.length) { card.style.display = "none"; return; }
   if (card.dataset.onpage !== "0") card.style.display = "";
-  const firstMon = mondayOf(new Date(keys.reduce((a, b) => a < b ? a : b) + "T00:00:00"));
+  const first = keys.length ? keys.reduce((a, b) => a < b ? a : b) : localISO(today);
+  const firstMon = mondayOf(new Date(first + "T00:00:00"));
   const weeks = Math.floor((today - firstMon) / WEEK) + 1;
   const cell = 11, gap = 3, top = 30, left = 26;
   const W = left + weeks * (cell + gap) + 4, H = top + 7 * (cell + gap) + 4;
@@ -892,30 +903,39 @@ function renderDiarrhea(dog) {
     for (let r = 0; r < 7; r++) {
       const d = addDays(firstMon, c * 7 + r);
       if (d > today) continue;
-      const rec = data[localISO(d)];
-      const fill = rec ? `var(--gi-${rec.lvl})` : "var(--surface)";
+      const rec = days[localISO(d)];
+      const fill = rec ? giFill(rec) : "var(--surface)";
       const x = left + c * (cell + gap), y = top + r * (cell + gap);
       let attrs = "";
       if (rec) {
-        const head = `<b>${fmtDay(d)} ${d.getFullYear()}</b>`;
         const t = rec.lvl === "parasite"
-          ? head + "documented parasite" + (rec.note ? `<br>${esc(rec.note)}` : "")
-          : head + `${esc(rec.sev || rec.lvl)} diarrhea`
-              + (rec.trig && rec.trig !== "unknown" ? `<br>trigger: ${esc(rec.trig)}` : "");
+          ? `<b>${fmtDay(d)} ${d.getFullYear()}</b>documented parasite` + (rec.note ? `<br>${esc(rec.note)}` : "")
+          : `<b>${fmtDay(d)} ${d.getFullYear()}</b>${esc(rec.lvl === "chronic" ? "chronic low-grade" : rec.sev)} diarrhea`
+              + (rec.blood ? " · blood" : "");
         attrs = ` data-tip="${esc(t)}"`;
       }
       s += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${fill}"` +
            ` stroke="var(--grid)" stroke-width="0.5"${attrs}/>`;
+      if (rec && rec.blood)
+        s += `<path d="M ${x + cell / 2} ${y + 1.5} l ${cell / 2 - 1.5} ${cell / 2 - 1.5} l ${-(cell / 2 - 1.5)} ${cell / 2 - 1.5} l ${-(cell / 2 - 1.5)} ${-(cell / 2 - 1.5)} z" fill="var(--ink)" pointer-events="none"/>`;
     }
   s += `</svg>`;
   const el = document.getElementById("gimap"); el.innerHTML = s; bindTips(el);
-  const eps = Object.values(data).filter(v => v.lvl === "acute").length;
   document.getElementById("giSub").textContent =
-    `Every recorded episode, by day · ${keys.length} affected days since ${keys.reduce((a, b) => a < b ? a : b)}`;
+    `Every recorded episode, by day · ${keys.length} affected days since ${first}`;
   document.getElementById("giLegend").innerHTML =
-    `<span>diarrhea:</span><span class="sw" style="background:var(--gi-acute)"></span><span>episode</span>` +
-    `<span class="sw" style="background:var(--gi-chronic)"></span><span>chronic low-grade</span>` +
-    `<span class="sw" style="background:var(--gi-parasite)"></span><span>documented parasite</span>`;
+    `<span>severity:</span>` +
+    ["mild", "moderate", "severe"].map(v => `<span class="sw" style="background:var(--gi-${v})"></span><span>${v}</span>`).join("") +
+    `<span class="sw" style="background:var(--gi-chronic)"></span><span>chronic</span>` +
+    `<span class="sw" style="background:var(--gi-parasite)"></span><span>parasite</span>` +
+    `<span style="margin-left:8px">◆ blood</span>`;
+  // raw-log table
+  const srcLabel = { owner_log: "log", vet_record: "vet", logged: "logged" };
+  document.getElementById("giTable").innerHTML = rows.length
+    ? `<table><tr><th>Date</th><th>Source</th><th>Entry</th></tr>` +
+      rows.map(e => `<tr><td>${e.date || ""}</td><td>${srcLabel[e.source] || esc(e.source || "")}</td>` +
+                    `<td>${esc(e.text || "")}</td></tr>`).join("") + `</table>`
+    : `<div class="sub">No log entries.</div>`;
 }
 
 function renderPepperKpis(dog) {
@@ -1157,6 +1177,30 @@ if (DATA.live) {
       if (!v) return flash("Type what she ate first");
       try { await post("/api/meal", { dog: petDog, other: v }); flash("Logged — reloading…"); reload(); }
       catch (e) { flash("Failed: " + e.message, 4000); }
+    };
+  }
+
+  // diarrhea incident logging (Pepper's diarrhea card)
+  const giLog = document.getElementById("giLog");
+  if (petDog && giLog) {
+    giLog.classList.add("on");
+    giLog.innerHTML =
+      `<span class="mgrp"><span class="lbl">Date</span><input id="giDate" type="date" value="${localISO(today)}"></span>` +
+      `<span class="mgrp"><span class="lbl">Severity</span><select id="giSev">` +
+      `<option>mild</option><option selected>moderate</option><option>severe</option></select></span>` +
+      `<span class="mgrp"><label><input id="giBlood" type="checkbox"> blood</label></span>` +
+      `<span class="mgrp"><input id="giNote" placeholder="note (optional)" style="width:150px"></span>` +
+      `<button class="btn" id="giBtn">Log incident</button>`;
+    document.getElementById("giBtn").onclick = async () => {
+      const date = document.getElementById("giDate").value || localISO(today);
+      try {
+        await post("/api/gi", { dog: petDog, date,
+          severity: document.getElementById("giSev").value,
+          blood: document.getElementById("giBlood").checked,
+          note: document.getElementById("giNote").value.trim() || undefined });
+        flash(`Logged ${petDog} incident — reloading…`);
+        setTimeout(() => location.reload(), 700);
+      } catch (e) { flash("Failed: " + e.message, 4000); }
     };
   }
 

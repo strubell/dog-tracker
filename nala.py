@@ -41,6 +41,7 @@ WEIGHT = DATA / "weight.json"
 NOTES = DATA / "notes.json"
 CIRCLES = DATA / "circles.json"
 MEALS = DATA / "meals.json"
+GI_LOG = DATA / "gi_incidents.json"
 AUTH = DATA / "strava_auth.json"
 TEMPLATE = BASE / "dashboard_template.html"
 DASHBOARD = BASE / "dashboard.html"
@@ -580,13 +581,35 @@ def cmd_meal(args):
     cmd_build(args)
 
 
+def cmd_gi(args):
+    dog = args.dog or config()["dog"]
+    log_gi(dog, _date_arg(args), args.severity, args.blood == "yes", args.note)
+    print(f"{dog} on {_date_arg(args)}: {args.severity} diarrhea"
+          + (", blood" if args.blood == "yes" else ""))
+    cmd_build(args)
+
+
 # ---------------------------------------------------------------- build
 
-def _gi_day_map(path):
-    """Expand a dog's GI-history episodes into a {date: {lvl,sev,trig}} map.
-    Acute episodes override chronic-phase days on overlap."""
+def _norm_sev(s):
+    s = (s or "").lower()
+    for k in ("severe", "moderate", "mild", "chronic"):
+        if k in s:
+            return k
+    return "moderate"
+
+
+def _blood_present(v):
+    return str(v or "").lower() in ("present", "intermittent", "yes", "true") \
+        or "blood" in str(v or "").lower()
+
+
+def _gi_history(path):
+    """Parse a dog's GI-history file into (day_map, table_rows).
+    day_map: {date: {lvl, sev, blood}}  (lvl: acute|chronic|parasite)
+    table_rows: verbatim raw-log entries {date, source, text}."""
     import re
-    raw = json.loads(Path(path).read_text())
+    raw = json.loads(path.read_text())
 
     def span(onset, resolved, dur):
         o = date.fromisoformat(onset)
@@ -613,26 +636,60 @@ def _gi_day_map(path):
             lvl = "chronic" if t == "chronic_phase" else "acute"
             if (want == "chronic_phase") != (lvl == "chronic"):
                 continue
+            # blood flagged only for discrete episodes; the months-long chronic
+            # phase had it intermittently, not every day, so don't smear it
+            rec = {"lvl": lvl, "sev": _norm_sev(e.get("severity")),
+                   "blood": lvl == "acute" and _blood_present(e.get("blood"))}
             for k in span(e["date_onset"], e.get("date_resolved"), e.get("duration_days")):
-                days[k] = {"lvl": lvl, "sev": e.get("severity"),
-                           "trig": e.get("suspected_trigger")}
-    # documented-parasite findings get their own status (marked last)
+                days[k] = rec
     for e in raw.get("episodes", []):
         if e.get("type") == "parasite_finding" and e.get("date"):
             days[e["date"]] = {"lvl": "parasite", "note": e.get("finding")}
-    return days
+
+    table = [{"date": x.get("date"), "source": x.get("source"), "text": x.get("text")}
+             for x in raw.get("raw_source_log", {}).get("entries", []) if x.get("text")]
+    return days, table
+
+
+def log_gi(dog, d, severity, blood, note=None):
+    """Record a diarrhea incident (one per dog per day; same date replaces)."""
+    store = load(GI_LOG, {})
+    lst = [x for x in store.get(dog, []) if x["date"] != d]
+    entry = {"date": d, "severity": _norm_sev(severity), "blood": bool(blood)}
+    if note:
+        entry["note"] = note
+    lst.append(entry)
+    lst.sort(key=lambda x: x["date"])
+    store[dog] = lst
+    save(GI_LOG, store)
+    return entry
 
 
 def load_gi(cfg):
-    out = {}
+    """Merge each dog's compiled history with any incidents logged here."""
+    days, table = {}, {}
+    store = load(GI_LOG, {})
     for d in dog_names(cfg):
         p = DATA / f"{d.lower()}_gi_history.json"
+        dm, tb = {}, []
         if p.exists():
             try:
-                out[d] = _gi_day_map(p)
+                dm, tb = _gi_history(p)
             except Exception:
                 pass
-    return out
+        for inc in store.get(d, []):
+            dm[inc["date"]] = {"lvl": "acute", "sev": _norm_sev(inc.get("severity")),
+                               "blood": bool(inc.get("blood"))}
+            txt = f"{inc.get('severity', '?')} diarrhea · blood: {'yes' if inc.get('blood') else 'no'}"
+            if inc.get("note"):
+                txt += f" — {inc['note']}"
+            tb.append({"date": inc["date"], "source": "logged", "text": txt})
+        if dm:
+            days[d] = dm
+        if tb:
+            tb.sort(key=lambda x: (x["date"] or ""), reverse=True)
+            table[d] = tb
+    return {"days": days, "table": table}
 
 
 def build_payload(cfg, db):
@@ -766,6 +823,11 @@ def cmd_serve(args):
                     log_meal(body["dog"], d, body.get("breakfast"),
                              body.get("dinner"), body.get("other"))
                     return self._send(200, json.dumps({"ok": True}))
+                if self.path == "/api/gi":
+                    d = body.get("date") or datetime.now(tz()).date().isoformat()
+                    log_gi(body["dog"], d, body.get("severity"),
+                           body.get("blood"), body.get("note"))
+                    return self._send(200, json.dumps({"ok": True}))
             except urllib.error.HTTPError as e:
                 return self._send(502, json.dumps({"error": f"Strava API: {e.code}"}))
             except (KeyError, ValueError) as e:
@@ -849,6 +911,14 @@ def main():
     s.add_argument("--other", help="any different/new food eaten (blank clears)")
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
     s.set_defaults(func=cmd_meal)
+
+    s = sub.add_parser("gi", help="log a diarrhea incident")
+    s.add_argument("--dog", help="which dog (default the primary one)")
+    s.add_argument("--severity", choices=["mild", "moderate", "severe"], default="moderate")
+    s.add_argument("--blood", choices=["yes", "no"], default="no")
+    s.add_argument("--note", help="free text")
+    s.add_argument("--date", help="YYYY-MM-DD (default today)")
+    s.set_defaults(func=cmd_gi)
 
     s = sub.add_parser("weight", help="log a weigh-in (lb)")
     s.add_argument("lb", type=float)
