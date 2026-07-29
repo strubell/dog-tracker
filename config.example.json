@@ -13,6 +13,14 @@
     "Nala": "#0ca4b8",
     "Pepper": "#d9534f"
   },
+  "profiles": {
+    "Nala": {
+      "birthdate": "2018-02",
+      "sex": "female, spayed",
+      "health_flags": ["Gluten sensitivity", "Anaplasma antibody positive"],
+      "vet_records_pdf": "data/records/nala_vet_records.pdf"
+    }
+  },
   "dna": {
     "Nala": {
       "test_date": "2021-01-05",

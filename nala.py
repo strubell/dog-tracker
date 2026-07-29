@@ -697,6 +697,43 @@ def _vet_val(v):
     return str(v)
 
 
+_VAX_GROUPS = [
+    ("Rabies", ["rabies"]),
+    ("DHPP", ["dhpp", "distemper", "parvovirus"]),
+    ("Lepto", ["lepto"]),
+    ("Bordetella", ["bordetella"]),
+    ("Lyme", ["lyme"]),
+    ("Influenza", ["influenza"]),
+]
+
+
+def load_vax(cfg):
+    """Compact per-dog vaccination summary: latest date per core vaccine group."""
+    import re
+    out = {}
+    for d in dog_names(cfg):
+        p = DATA / f"{d.lower()}_vet_records.json"
+        if not p.exists():
+            continue
+        try:
+            hist = json.loads(p.read_text()).get("vaccination_history", [])
+        except Exception:
+            continue
+        latest = {}
+        for e in hist:
+            m = re.match(r"(\d{4}(?:-\d{2}){0,2})", str(e.get("date", "")))
+            date = m.group(1) if m else ""
+            names = " ".join(str(x) for x in (e.get("vaccines") or [e.get("vaccine")]) if x).lower()
+            for label, keys in _VAX_GROUPS:
+                if any(k in names for k in keys) and date > latest.get(label, ""):
+                    latest[label] = date
+        items = [{"name": label, "date": latest[label]}
+                 for label, _ in _VAX_GROUPS if label in latest]
+        if items:
+            out[d] = items
+    return out
+
+
 def load_vet(cfg):
     """Per-dog vet encounter timeline from data/<dog>_vet_records.json."""
     out = {}
@@ -782,6 +819,7 @@ def build_payload(cfg, db):
         "meals": load(MEALS, {}),
         "gi": load_gi(cfg),
         "vet": load_vet(cfg),
+        "vax": load_vax(cfg),
         "generated": datetime.now(tz()).isoformat(timespec="minutes"),
     }
 
@@ -828,9 +866,15 @@ def cmd_serve(args):
 
         def do_GET(self):
             if self.path in ("/", "/index.html"):
-                self._send(200, render_html(live=True), "text/html; charset=utf-8")
-            else:
-                self._send(404, "not found", "text/plain")
+                return self._send(200, render_html(live=True), "text/html; charset=utf-8")
+            # serve record PDFs from data/ (read-only, .pdf only, no traversal)
+            path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
+            if path.startswith("/data/") and path.endswith(".pdf"):
+                target = (DATA / path[len("/data/"):]).resolve()
+                if str(target).startswith(str(DATA.resolve())) and target.is_file():
+                    return self._send(200, target.read_bytes(), "application/pdf")
+                return self._send(404, "not found", "text/plain")
+            self._send(404, "not found", "text/plain")
 
         def do_POST(self):
             n = int(self.headers.get("Content-Length", 0))
