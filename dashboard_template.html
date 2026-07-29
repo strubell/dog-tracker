@@ -845,6 +845,13 @@ function ageFromBirthdate(bd) {
   const b = new Date(iso + "T00:00:00");
   return (today - b) / (365.25 * DAY);
 }
+function fmtBirth(bd) {
+  if (/^\d{4}-\d{2}$/.test(bd)) {   // month precision → "~Feb 2018"
+    const [y, m] = bd.split("-");
+    return "~" + new Date(+y, +m - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  }
+  return bd;
+}
 function renderHero(dog) {
   const prof = (cfg.profiles || {})[dog] || {};
   // photo
@@ -853,7 +860,7 @@ function renderHero(dog) {
   document.getElementById("heroName").textContent = dog;
   // vitals: born + age · sex · latest weight
   const vit = [];
-  if (prof.birthdate) vit.push(`Born ${prof.birthdate} <span class="d">(~${Math.floor(ageFromBirthdate(prof.birthdate))} yr)</span>`);
+  if (prof.birthdate) vit.push(`Born ${fmtBirth(prof.birthdate)} <span class="d">(~${Math.floor(ageFromBirthdate(prof.birthdate))} yr)</span>`);
   if (prof.sex) vit.push(esc(prof.sex));
   const wl = DATA.weight.filter(e => (e.dog || cfg.dog) === dog).sort((a, b) => a.date < b.date ? -1 : 1);
   if (wl.length) vit.push(`${wl[wl.length - 1].lb.toFixed(1)} lb`);
