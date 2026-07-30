@@ -175,14 +175,13 @@
   .heroflags .flag { background: var(--warn-wash); border: 1px solid var(--border); border-radius: 999px;
                      padding: 2px 11px; font-size: 12px; font-weight: 600; }
   .hero .breedbar { margin-top: 12px; }
-  .hero .breedmeta a { color: var(--series); text-decoration: none; }
   .hero .stamp { margin-top: 10px; }
   .breedbar { display: flex; height: 20px; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; }
   .breedbar span { display: block; height: 100%; }
   .breedlist { display: flex; flex-wrap: wrap; gap: 7px 20px; font-size: 14px; }
   .breedlist .bi { display: flex; align-items: center; gap: 7px; }
   .breedlist .dot { width: 11px; height: 11px; border-radius: 3px; flex: none; }
-  .breedmeta { color: var(--ink-2); font-size: 13px; margin-top: 12px; }
+  .breedlist .dnalink { margin-left: auto; color: var(--series); text-decoration: none; white-space: nowrap; }
   .vet .vh-item { border-bottom: 1px solid var(--grid); }
   .vet .vh-item:last-child { border-bottom: none; }
   .vet .vh-item > summary { cursor: pointer; list-style: none; padding: 10px 0; font-size: 14px; }
@@ -234,7 +233,6 @@
         <div class="heroflags" id="heroFlags"></div>
         <div class="breedbar" id="breedBar"></div>
         <div class="breedlist" id="breedList"></div>
-        <div class="breedmeta" id="breedMeta"></div>
         <div class="stamp" id="stamp"></div>
       </div>
     </div>
@@ -904,23 +902,20 @@ function renderHero(dog) {
   // health flags
   document.getElementById("heroFlags").innerHTML =
     (prof.health_flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("");
-  // breed mix
+  // breed mix — list ends with a right-justified DNA-report link
   const dna = (cfg.dna || {})[dog], bar = document.getElementById("breedBar"),
-        list = document.getElementById("breedList"), meta = document.getElementById("breedMeta");
+        list = document.getElementById("breedList");
   if (dna && (dna.breeds || []).length) {
     const breeds = dna.breeds, other = Math.max(0, 100 - breeds.reduce((s, b) => s + b.pct, 0));
     const color = i => BREED_PAL[i % BREED_PAL.length];
-    bar.style.display = ""; list.style.display = ""; meta.style.display = "";
+    bar.style.display = ""; list.style.display = "";
     bar.innerHTML = breeds.map((b, i) => `<span style="width:${b.pct}%;background:${color(i)}"></span>`).join("") +
       (other > 0 ? `<span style="width:${other}%;background:var(--grid)"></span>` : "");
     list.innerHTML = breeds.map((b, i) => `<span class="bi"><span class="dot" style="background:${color(i)}"></span>${b.pct}% ${esc(b.name)}</span>`).join("") +
-      (other > 0 ? `<span class="bi"><span class="dot" style="background:var(--grid)"></span>${other}% other</span>` : "");
-    const bits = [];
-    if (dna.test_date) bits.push(`Wisdom Panel ${dna.test_date}`);
-    meta.innerHTML = bits.join(" · ") +
-      ` · <a href="data/${dog.toLowerCase()}_wisdom_panel.pdf" target="_blank" rel="noopener">DNA report ↗</a>`;
+      (other > 0 ? `<span class="bi"><span class="dot" style="background:var(--grid)"></span>${other}% other</span>` : "") +
+      `<a class="dnalink" href="data/${dog.toLowerCase()}_wisdom_panel.pdf" target="_blank" rel="noopener">DNA report ↗</a>`;
   } else {
-    bar.style.display = "none"; list.style.display = "none"; meta.style.display = "none";
+    bar.style.display = "none"; list.style.display = "none";
   }
 }
 
