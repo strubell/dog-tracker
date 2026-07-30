@@ -42,6 +42,7 @@ NOTES = DATA / "notes.json"
 CIRCLES = DATA / "circles.json"
 MEALS = DATA / "meals.json"
 GI_LOG = DATA / "gi_incidents.json"
+MED_LOG = DATA / "med_log.json"
 AUTH = DATA / "strava_auth.json"
 TEMPLATE = BASE / "dashboard_template.html"
 DASHBOARD = BASE / "dashboard.html"
@@ -735,6 +736,90 @@ def load_vax(cfg):
     return out
 
 
+def _med_courses(path):
+    """Past medication courses from a vet-records file, as {name,dose,reason,start,end}."""
+    import re
+    raw = json.loads(path.read_text())
+
+    def d(x):
+        m = re.match(r"(\d{4}-\d{2}-\d{2})", str(x or ""))
+        return m.group(1) if m else None
+
+    out = []
+    for m in raw.get("medications", []):
+        rng = str(m.get("date_range") or "")
+        start = (d(m.get("course_start")) or d(m.get("date_actually_started"))
+                 or d(m.get("date_prescribed")) or d(m.get("date")))
+        if not start and " to " in rng:
+            start = d(rng.split(" to ")[0])
+        if not start:
+            continue
+        end = d(m.get("course_end")) or d(m.get("estimated_completion"))
+        if not end and " to " in rng:
+            end = d(rng.split(" to ")[1])
+        if not end and m.get("duration_days"):
+            try:
+                end = (date.fromisoformat(start) + timedelta(days=int(m["duration_days"]) - 1)).isoformat()
+            except Exception:
+                pass
+        out.append({"name": m.get("drug", ""), "dose": m.get("strength") or "",
+                    "reason": m.get("indication") or "", "start": start, "end": end or start})
+    return out
+
+
+def log_med(dog, d, skip=None, add=None):
+    """Set a day's medication log: skip = daily-med names not given; add = ad-hoc meds."""
+    store = load(MED_LOG, {})
+    day = store.setdefault(dog, {}).setdefault(d, {})
+    if skip is not None:
+        day["skip"] = skip
+    if add is not None:
+        day["add"] = add
+    if not day.get("skip") and not day.get("add"):
+        store[dog].pop(d, None)
+    save(MED_LOG, store)
+    return day
+
+
+def load_meds(cfg):
+    """Per-dog meds: standing daily meds (config), past courses (vet history),
+    and the ad-hoc / skipped-dose log kept here."""
+    store = load(MED_LOG, {})
+    out = {}
+    for dg in dog_names(cfg):
+        prof = (cfg.get("profiles") or {}).get(dg, {})
+        courses = []
+        p = DATA / f"{dg.lower()}_vet_records.json"
+        if p.exists():
+            try:
+                courses = _med_courses(p)
+            except Exception:
+                pass
+        out[dg] = {"daily": prof.get("daily_medications", []),
+                   "courses": courses, "log": store.get(dg, {})}
+    return out
+
+
+def cmd_med(args):
+    dog = args.dog or config()["dog"]
+    d = _date_arg(args)
+    store = load(MED_LOG, {})
+    day = store.setdefault(dog, {}).setdefault(d, {})
+    if args.skip:
+        day.setdefault("skip", [])
+        if args.skip not in day["skip"]:
+            day["skip"].append(args.skip)
+    if args.add:
+        day.setdefault("add", []).append(
+            {"name": args.add, "dose": args.dose or "",
+             **({"note": args.note} if args.note else {})})
+    save(MED_LOG, store)
+    print(f"{dog} {d}: " + ", ".join(filter(None, [
+        f"skipped {args.skip}" if args.skip else "",
+        f"added {args.add}" if args.add else ""])))
+    cmd_build(args)
+
+
 def load_vet(cfg):
     """Per-dog vet encounter timeline from data/<dog>_vet_records.json."""
     out = {}
@@ -821,6 +906,7 @@ def build_payload(cfg, db):
         "gi": load_gi(cfg),
         "vet": load_vet(cfg),
         "vax": load_vax(cfg),
+        "meds": load_meds(cfg),
         "generated": datetime.now(tz()).isoformat(timespec="minutes"),
     }
 
@@ -941,6 +1027,10 @@ def cmd_serve(args):
                     log_gi(body["dog"], d, body.get("severity"),
                            body.get("blood"), body.get("note"))
                     return self._send(200, json.dumps({"ok": True}))
+                if self.path == "/api/med":
+                    d = body.get("date") or datetime.now(tz()).date().isoformat()
+                    log_med(body["dog"], d, body.get("skip"), body.get("add"))
+                    return self._send(200, json.dumps({"ok": True}))
             except urllib.error.HTTPError as e:
                 return self._send(502, json.dumps({"error": f"Strava API: {e.code}"}))
             except (KeyError, ValueError) as e:
@@ -1032,6 +1122,15 @@ def main():
     s.add_argument("--note", help="free text")
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
     s.set_defaults(func=cmd_gi)
+
+    s = sub.add_parser("med", help="log a medication given/skipped for a day")
+    s.add_argument("--dog", help="which dog (default the primary one)")
+    s.add_argument("--add", help="ad-hoc medication name given")
+    s.add_argument("--dose", help="dose for --add")
+    s.add_argument("--note", help="note for --add")
+    s.add_argument("--skip", help="daily-med name that was NOT given")
+    s.add_argument("--date", help="YYYY-MM-DD (default today)")
+    s.set_defaults(func=cmd_med)
 
     s = sub.add_parser("weight", help="log a weigh-in (lb)")
     s.add_argument("lb", type=float)

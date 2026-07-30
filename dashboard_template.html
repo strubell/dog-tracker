@@ -201,6 +201,25 @@
             color: var(--ink-muted); margin-top: 8px; flex-wrap: wrap; }
   .legend .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block;
                 border: 1px solid var(--border); }
+  .medhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .medhead .mlabel { font-weight: 600; min-width: 150px; text-align: center; }
+  .medhead button { padding: 5px 14px; }
+  .medgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; min-width: 660px; }
+  .medgrid .dow { text-align: center; font-size: 11px; color: var(--ink-muted); }
+  .medcell { min-height: 54px; border: 1px solid var(--grid); border-radius: 7px; padding: 3px 5px; }
+  .medcell.blank { border: none; }
+  .medcell.today { border-color: var(--series); box-shadow: inset 0 0 0 1px var(--series); }
+  .medcell.future { opacity: 0.5; }
+  .medcell.clickable { cursor: pointer; }
+  .medcell.clickable:hover { background: var(--band); }
+  .medcell .dnum { font-size: 11px; color: var(--ink-muted); }
+  .medcell .mdots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+  .mdot { width: 9px; height: 9px; border-radius: 50%; }
+  .mdot.skip { background: transparent !important; border: 1.5px solid var(--ink-muted); }
+  .mededitor { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); font-size: 14px; }
+  .mededitor.hide { display: none; }
+  .mededitor input { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
+                     border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
 </style>
 
 <div class="page">
@@ -210,7 +229,6 @@
       <img class="heropic" id="heroPic" alt="">
       <div class="heroinfo">
         <h1 id="heroName"></h1>
-        <div class="sub" id="subtitle" data-page="Nala"></div>
         <div class="herovitals" id="heroVitals"></div>
         <div class="herovax" id="heroVax"></div>
         <div class="heroflags" id="heroFlags"></div>
@@ -287,6 +305,19 @@
       <div class="sub">Advance only after a no-joint-signs week; repeat the week otherwise</div>
       <ol class="phases" id="phases"></ol>
     </div>
+  </div>
+
+  <div class="card" id="medCard" data-page="Nala Pepper">
+    <h2>Medications</h2>
+    <div class="sub">Daily meds auto-fill each day; tap a day to log a skipped dose or a one-off med</div>
+    <div class="medhead">
+      <button class="btn" id="medPrev">‹</button>
+      <span class="mlabel" id="medLabel"></span>
+      <button class="btn" id="medNext">›</button>
+    </div>
+    <div class="scroll"><div class="medgrid" id="medGrid"></div></div>
+    <div class="legend" id="medLegend"></div>
+    <div class="mededitor hide" id="medEditor"></div>
   </div>
 
   <div class="duo" id="weightRow" style="margin-bottom:16px">
@@ -412,13 +443,6 @@ const weekStats = nalaAgg.weekStats;
 
 // ---- header ---------------------------------------------------------------
 {
-  const ph = phaseFor(planWeek);
-  const label = planWeek < 1
-    ? `Plan starts ${fmtDay(planStart)}`
-    : `Week ${planWeek}` + (ph ? ` · ${ph.title}` : "");
-  const day = Math.floor((today - planStart) / DAY) + 1;
-  document.getElementById("subtitle").innerHTML =
-    `<span class="phase-chip">${esc(label)}${planWeek >= 1 && planWeek <= planWeeks ? ` · day ${day} of ${planDays}` : ""}</span>`;
   document.getElementById("stamp").textContent = "Updated " + DATA.generated.replace("T", " ").slice(0, 16);
   if (!DATA.live) {
     const parts = [];
@@ -850,7 +874,7 @@ function fmtBirth(bd) {
     const [y, m] = bd.split("-");
     return "~" + new Date(+y, +m - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
   }
-  return bd;
+  return new Date(bd + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 function renderHero(dog) {
   const prof = (cfg.profiles || {})[dog] || {};
@@ -861,6 +885,7 @@ function renderHero(dog) {
   // vitals: born + age · sex · latest weight
   const vit = [];
   if (prof.birthdate) vit.push(`Born ${fmtBirth(prof.birthdate)} <span class="d">(~${Math.floor(ageFromBirthdate(prof.birthdate))} yr)</span>`);
+  if (prof.adopted) vit.push(`adopted ${fmtBirth(prof.adopted)}`);
   if (prof.sex) vit.push(esc(prof.sex));
   const wl = DATA.weight.filter(e => (e.dog || cfg.dog) === dog).sort((a, b) => a.date < b.date ? -1 : 1);
   if (wl.length) vit.push(`${wl[wl.length - 1].lb.toFixed(1)} lb`);
@@ -886,7 +911,6 @@ function renderHero(dog) {
     list.innerHTML = breeds.map((b, i) => `<span class="bi"><span class="dot" style="background:${color(i)}"></span>${b.pct}% ${esc(b.name)}</span>`).join("") +
       (other > 0 ? `<span class="bi"><span class="dot" style="background:var(--grid)"></span>${other}% other</span>` : "");
     const bits = [];
-    if (dna.ideal_weight_lb) bits.push(`Ideal ${dna.ideal_weight_lb[0]}–${dna.ideal_weight_lb[1]} lb`);
     if (dna.test_date) bits.push(`Wisdom Panel ${dna.test_date}`);
     meta.innerHTML = bits.join(" · ") +
       ` · <a href="data/${dog.toLowerCase()}_wisdom_panel.pdf" target="_blank" rel="noopener">DNA report ↗</a>`;
@@ -910,6 +934,62 @@ function renderVet(dog) {
       `<div class="vline"><b>${esc(l.label)}:</b> ${esc(l.text)}</div>`).join("");
     return `<details class="vh-item">${summary}<div class="vbody">${lines}</div></details>`;
   }).join("");
+}
+
+// ---- medications calendar (per dog, one month at a time) --------------------------
+const MED_PAL = ["#5b8ff9", "#e8684a", "#61ddaa", "#f6a35c", "#9270ca", "#e0a63a", "#5ad8a6", "#d9534f"];
+let medMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+function medColorMap(dog) {
+  const M = (DATA.meds || {})[dog] || {};
+  const names = new Set();
+  (M.daily || []).forEach(m => names.add(m.name));
+  (M.courses || []).forEach(c => names.add(c.name));
+  Object.values(M.log || {}).forEach(l => (l.add || []).forEach(a => names.add(a.name)));
+  const map = {};
+  [...names].sort().forEach((n, i) => map[n] = MED_PAL[i % MED_PAL.length]);
+  return map;
+}
+function medsOn(dog, iso) {
+  const M = (DATA.meds || {})[dog] || { daily: [], courses: [], log: {} };
+  const log = (M.log || {})[iso] || {};
+  const skip = new Set(log.skip || []);
+  const res = [];
+  for (const m of M.daily || []) {
+    if ((m.start && iso < m.start) || (m.end && iso > m.end)) continue;
+    res.push({ name: m.name, dose: m.dose, reason: m.reason, freq: m.freq, kind: "daily", skipped: skip.has(m.name) });
+  }
+  for (const c of M.courses || [])
+    if (c.start && iso >= c.start && iso <= (c.end || c.start))
+      res.push({ name: c.name, dose: c.dose, reason: c.reason, kind: "course" });
+  for (const a of log.add || []) res.push({ name: a.name, dose: a.dose, note: a.note, kind: "one-off" });
+  return res;
+}
+function renderMeds(dog) {
+  const colors = medColorMap(dog);
+  const y = medMonth.getFullYear(), mo = medMonth.getMonth();
+  document.getElementById("medLabel").textContent =
+    medMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const startPad = new Date(y, mo, 1).getDay(), daysIn = new Date(y, mo + 1, 0).getDate();
+  let html = ["S", "M", "T", "W", "T", "F", "S"].map(d => `<div class="dow">${d}</div>`).join("");
+  for (let i = 0; i < startPad; i++) html += `<div class="medcell blank"></div>`;
+  const seen = new Set();
+  for (let day = 1; day <= daysIn; day++) {
+    const dt = new Date(y, mo, day), iso = localISO(dt), meds = medsOn(dog, iso);
+    meds.forEach(m => seen.add(m.name));
+    const dots = meds.map(m => `<span class="mdot${m.skipped ? " skip" : ""}" style="background:${colors[m.name] || 'var(--grid)'}"></span>`).join("");
+    const tip = meds.length ? `<b>${fmtDay(dt)}</b>` + meds.map(m =>
+      `${m.skipped ? "✗ " : ""}${esc(m.name)}${m.dose ? " " + esc(m.dose) : ""}` +
+      `${m.freq ? " (" + esc(m.freq) + ")" : ""}${m.kind === "one-off" ? " · one-off" : m.kind === "course" ? " · course" : ""}`).join("<br>") : "";
+    html += `<div class="medcell clickable${+dt === +today ? " today" : ""}${dt > today ? " future" : ""}" data-iso="${iso}"` +
+            `${tip ? ` data-tip="${esc(tip)}"` : ""}><div class="dnum">${day}</div><div class="mdots">${dots}</div></div>`;
+  }
+  const grid = document.getElementById("medGrid"); grid.innerHTML = html; bindTips(grid);
+  document.getElementById("medLegend").innerHTML = seen.size
+    ? [...seen].sort().map(n => `<span class="sw" style="background:${colors[n]};border-radius:50%"></span><span>${esc(n)}</span>`).join("")
+      + `<span class="sw skip" style="background:transparent;border:1.5px solid var(--ink-muted);border-radius:50%"></span><span>skipped</span>`
+    : `<span>No medications this month.</span>`;
+  if (DATA.live && window.openMedEditor)
+    grid.querySelectorAll(".medcell.clickable").forEach(c => c.onclick = () => window.openMedEditor(dog, c.dataset.iso));
 }
 
 // ---- notes (filtered to the active dog) -------------------------------------------
@@ -1125,6 +1205,7 @@ function setPage(dog) {
   renderHero(dog);
   renderNotes(dog);
   renderVet(dog);
+  renderMeds(dog);
   renderDiarrhea(dog);
   renderFeeding(dog);
   renderCumulative(dog);
@@ -1142,6 +1223,8 @@ document.getElementById("tabs").innerHTML = dogList
   .map(d => `<button class="tab" data-dog="${esc(d)}">${esc(d)}</button>`).join("");
 document.querySelectorAll("#tabs .tab").forEach(t => t.onclick = () => setPage(t.dataset.dog));
 document.getElementById("notesToggle").onclick = () => { notesShowAll = !notesShowAll; renderNotes(activeDog); };
+document.getElementById("medPrev").onclick = () => { medMonth.setMonth(medMonth.getMonth() - 1); renderMeds(activeDog); };
+document.getElementById("medNext").onclick = () => { medMonth.setMonth(medMonth.getMonth() + 1); renderMeds(activeDog); };
 
 // render Pepper's panels for every non-primary dog (only Pepper for now)
 for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderPepperKpis(d); }
@@ -1335,9 +1418,40 @@ if (DATA.live) {
     };
   }
 
+  // medications: tap a calendar day to mark daily doses given/skipped or add a one-off
+  window.openMedEditor = (dog, iso) => {
+    const M = (DATA.meds || {})[dog] || {}, log = (M.log || {})[iso] || {};
+    const skip = new Set(log.skip || []);
+    const daily = (M.daily || []).filter(m => (!m.start || iso >= m.start) && (!m.end || iso <= m.end));
+    const ed = document.getElementById("medEditor");
+    ed.classList.remove("hide");
+    ed.innerHTML = `<div style="font-weight:600;margin-bottom:6px">${fmtDay(new Date(iso + "T00:00:00"))}, ${iso.slice(0, 4)}</div>` +
+      (daily.length
+        ? daily.map(m => `<label style="display:block;margin:4px 0"><input type="checkbox" class="medgiven" data-name="${esc(m.name)}" ${skip.has(m.name) ? "" : "checked"}> ${esc(m.name)} ${esc(m.dose || "")} <span class="d">given</span></label>`).join("")
+        : `<div class="d">No standing daily meds.</div>`) +
+      (log.add || []).map(a => `<div class="d">＋ ${esc(a.name)} ${esc(a.dose || "")} (one-off)</div>`).join("") +
+      `<div class="mgrp" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">` +
+      `<input id="medAddName" placeholder="one-off med…" style="width:150px">` +
+      `<input id="medAddDose" placeholder="dose" style="width:90px">` +
+      `<button class="btn primary" id="medSave">Save</button>` +
+      `<button class="btn" id="medCancel">Cancel</button></div>`;
+    document.getElementById("medCancel").onclick = () => ed.classList.add("hide");
+    document.getElementById("medSave").onclick = async () => {
+      const skipNames = [...ed.querySelectorAll(".medgiven")].filter(c => !c.checked).map(c => c.dataset.name);
+      const add = (log.add || []).slice();
+      const nm = document.getElementById("medAddName").value.trim();
+      if (nm) add.push({ name: nm, dose: document.getElementById("medAddDose").value.trim() });
+      try {
+        await post("/api/med", { dog, date: iso, skip: skipNames, add });
+        flash("Saved — reloading…"); setTimeout(() => location.reload(), 700);
+      } catch (e) { flash("Failed: " + e.message, 4000); }
+    };
+  };
+
   const unc = DATA.unclassified || [];
   if (unc.length)
     showReview(`Needs your confirmation`, unc.map(a => reviewRow("activity", a.id, activityInfo(a))));
+  renderMeds(activeDog);   // re-render so calendar day clicks bind now that the editor exists
 }
 
 setPage(activeDog);
