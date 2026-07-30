@@ -19,25 +19,56 @@
       "adopted": "2018-08-19",
       "sex": "female, spayed",
       "microchip": "985112010302079",
-      "health_flags": ["Gluten sensitivity", "Anaplasma exposure (antibody+)"],
-      "daily_medications": [
-        {"name": "Trazodone", "dose": "100 mg", "freq": "2×/day", "reason": "anxiety", "start": "2023-05-28"}
+      "health_flags": [
+        "Gluten sensitivity",
+        "Anaplasma exposure (antibody+)"
       ],
-      "vet_records_pdf": "data/records/nala_vet_records.pdf"
+      "daily_medications": [
+        {
+          "name": "Trazodone",
+          "dose": "100 mg",
+          "freq": "2×/day",
+          "reason": "anxiety",
+          "start": "2023-05-28"
+        }
+      ],
+      "vet_records_pdf": "vet_records/seaport_records_nala.pdf"
     }
   },
   "dna": {
     "Nala": {
       "test_date": "2021-01-05",
-      "ideal_weight_lb": [44, 73],
-      "breeds": [
-        {"name": "Labrador Retriever", "pct": 25},
-        {"name": "Airedale Terrier", "pct": 19},
-        {"name": "Siberian Husky", "pct": 8},
-        {"name": "Chow Chow", "pct": 6},
-        {"name": "Australian Cattle Dog", "pct": 5}
+      "ideal_weight_lb": [
+        44,
+        73
       ],
-      "health": {"at_risk": [], "carrier": [], "clear": 210}
+      "breeds": [
+        {
+          "name": "Labrador Retriever",
+          "pct": 25
+        },
+        {
+          "name": "Airedale Terrier",
+          "pct": 19
+        },
+        {
+          "name": "Siberian Husky",
+          "pct": 8
+        },
+        {
+          "name": "Chow Chow",
+          "pct": 6
+        },
+        {
+          "name": "Australian Cattle Dog",
+          "pct": 5
+        }
+      ],
+      "health": {
+        "at_risk": [],
+        "carrier": [],
+        "clear": 210
+      }
     }
   },
   "feeding": {

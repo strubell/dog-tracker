@@ -171,6 +171,7 @@
   .herovitals .d { color: var(--ink-muted); }
   .herovax { font-size: 13px; margin: 6px 0; }
   .herovax a { color: var(--series); text-decoration: none; white-space: nowrap; }
+  .herovax .vexp { color: var(--ink-muted); font-style: italic; }
   .heroflags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
   .heroflags .flag { background: var(--warn-wash); border: 1px solid var(--border); border-radius: 999px;
                      padding: 2px 11px; font-size: 12px; font-weight: 600; }
@@ -898,7 +899,9 @@ function renderHero(dog) {
   const link = prof.vet_records_pdf
     ? ` · <a href="${esc(prof.vet_records_pdf)}" target="_blank" rel="noopener">records ↗</a>` : "";
   document.getElementById("heroVax").innerHTML = vax.length
-    ? `<b>Vaccines:</b> ${vax.map(v => `${esc(v.name)} ${v.date}`).join(" · ")}${link}` : "";
+    ? `<b>Vaccines:</b> ${vax.map(v => { const t = `${esc(v.name)} ${v.date}`;
+        return v.expired ? `<span class="vexp" title="due ${v.due} — expired">${t}</span>` : t;
+      }).join(" · ")}${link}` : "";
   // health flags
   document.getElementById("heroFlags").innerHTML =
     (prof.health_flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("");

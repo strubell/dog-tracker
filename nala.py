@@ -709,9 +709,20 @@ _VAX_GROUPS = [
 ]
 
 
+_VAX_INTERVAL_YEARS = {"Rabies": 3}   # others default to 1
+
+
+def _add_years(iso, n):
+    parts = iso.split("-")
+    parts[0] = f"{int(parts[0]) + n:04d}"
+    return "-".join(parts)
+
+
 def load_vax(cfg):
-    """Compact per-dog vaccination summary: latest date per core vaccine group."""
+    """Compact per-dog vaccination summary: latest date per core vaccine group,
+    with a computed due date and an `expired` flag (past due)."""
     import re
+    today_str = datetime.now(tz()).date().isoformat()
     out = {}
     for d in dog_names(cfg):
         p = DATA / f"{d.lower()}_vet_records.json"
@@ -729,8 +740,13 @@ def load_vax(cfg):
             for label, keys in _VAX_GROUPS:
                 if any(k in names for k in keys) and date > latest.get(label, ""):
                     latest[label] = date
-        items = [{"name": label, "date": latest[label]}
-                 for label, _ in _VAX_GROUPS if label in latest]
+        items = []
+        for label, _ in _VAX_GROUPS:
+            if label not in latest:
+                continue
+            dt = latest[label]
+            due = _add_years(dt, _VAX_INTERVAL_YEARS.get(label, 1))
+            items.append({"name": label, "date": dt, "due": due, "expired": due < today_str})
         if items:
             out[d] = items
     return out
@@ -954,11 +970,11 @@ def cmd_serve(args):
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 return self._send(200, render_html(live=True), "text/html; charset=utf-8")
-            # serve record PDFs from data/ (read-only, .pdf only, no traversal)
+            # serve record PDFs under the project dir (read-only, .pdf only, no traversal)
             path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
-            if path.startswith("/data/") and path.endswith(".pdf"):
-                target = (DATA / path[len("/data/"):]).resolve()
-                if str(target).startswith(str(DATA.resolve())) and target.is_file():
+            if path.endswith(".pdf"):
+                target = (BASE / path.lstrip("/")).resolve()
+                if str(target).startswith(str(BASE.resolve())) and target.is_file():
                     return self._send(200, target.read_bytes(), "application/pdf")
                 return self._send(404, "not found", "text/plain")
             self._send(404, "not found", "text/plain")
