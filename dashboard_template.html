@@ -176,8 +176,7 @@
                      padding: 2px 11px; font-size: 12px; font-weight: 600; }
   .hero .breedbar { margin-top: 12px; }
   .hero .breedmeta a { color: var(--series); text-decoration: none; }
-  .herochip { color: var(--ink-muted); font-size: 12px; margin-top: 10px; font-variant-numeric: tabular-nums; }
-  .hero .stamp { margin-top: 2px; }
+  .hero .stamp { margin-top: 10px; }
   .breedbar { display: flex; height: 20px; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; }
   .breedbar span { display: block; height: 100%; }
   .breedlist { display: flex; flex-wrap: wrap; gap: 7px 20px; font-size: 14px; }
@@ -236,7 +235,6 @@
         <div class="breedbar" id="breedBar"></div>
         <div class="breedlist" id="breedList"></div>
         <div class="breedmeta" id="breedMeta"></div>
-        <div class="herochip" id="heroChip"></div>
         <div class="stamp" id="stamp"></div>
       </div>
     </div>
@@ -866,10 +864,11 @@ function renderFeeding(dog) {
 
 // ---- profile hero (photo + vitals + vaccinations + flags + breed mix) -------------
 const BREED_PAL = ["#5b8ff9", "#61ddaa", "#f6a35c", "#e8684a", "#9270ca", "#5ad8a6"];
-function ageFromBirthdate(bd) {
-  const iso = bd.length === 7 ? bd + "-01" : bd;
-  const b = new Date(iso + "T00:00:00");
-  return (today - b) / (365.25 * DAY);
+function ageYM(bd) {   // {y, m} from a birthdate (YYYY-MM treated as the 1st)
+  const b = new Date((bd.length === 7 ? bd + "-01" : bd) + "T00:00:00");
+  let months = (today.getFullYear() - b.getFullYear()) * 12 + (today.getMonth() - b.getMonth());
+  if (today.getDate() < b.getDate()) months -= 1;
+  return { y: Math.floor(months / 12), m: months % 12 };
 }
 function fmtBirth(bd) {
   if (/^\d{4}-\d{2}$/.test(bd)) {   // month precision → "~Feb 2018"
@@ -886,11 +885,15 @@ function renderHero(dog) {
   document.getElementById("heroName").textContent = dog;
   // vitals: born + age · sex · latest weight
   const vit = [];
-  if (prof.birthdate) vit.push(`Born ${fmtBirth(prof.birthdate)} <span class="d">(~${Math.floor(ageFromBirthdate(prof.birthdate))} yr)</span>`);
+  if (prof.birthdate) {
+    const exact = prof.birthdate.length > 7;   // full date = exact DOB, else approx
+    const { y, m } = ageYM(prof.birthdate);
+    const age = `${exact ? "" : "~"}${y} yr${m ? ` ${m} mo` : ""}`;
+    vit.push(`Born ${fmtBirth(prof.birthdate)} <span class="d">(${age})</span>`);
+  }
   if (prof.adopted) vit.push(`adopted ${fmtBirth(prof.adopted)}`);
   if (prof.sex) vit.push(esc(prof.sex));
-  const wl = DATA.weight.filter(e => (e.dog || cfg.dog) === dog).sort((a, b) => a.date < b.date ? -1 : 1);
-  if (wl.length) vit.push(`${wl[wl.length - 1].lb.toFixed(1)} lb`);
+  if (prof.microchip) vit.push(`<span class="d">microchip ${esc(prof.microchip)}</span>`);
   document.getElementById("heroVitals").innerHTML = vit.join(" · ");
   // vaccinations + link to source records
   const vax = (DATA.vax || {})[dog] || [];
@@ -901,7 +904,6 @@ function renderHero(dog) {
   // health flags
   document.getElementById("heroFlags").innerHTML =
     (prof.health_flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("");
-  document.getElementById("heroChip").textContent = prof.microchip ? `Microchip ${prof.microchip}` : "";
   // breed mix
   const dna = (cfg.dna || {})[dog], bar = document.getElementById("breedBar"),
         list = document.getElementById("breedList"), meta = document.getElementById("breedMeta");
