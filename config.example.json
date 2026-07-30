@@ -16,6 +16,7 @@
   "profiles": {
     "Nala": {
       "birthdate": "2018-02",
+      "adopted": "2018-08-19",
       "sex": "female, spayed",
       "microchip": "985112010302079",
       "health_flags": ["Gluten sensitivity", "Anaplasma exposure (antibody+)"],
