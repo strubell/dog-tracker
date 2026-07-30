@@ -176,7 +176,8 @@
                      padding: 2px 11px; font-size: 12px; font-weight: 600; }
   .hero .breedbar { margin-top: 12px; }
   .hero .breedmeta a { color: var(--series); text-decoration: none; }
-  .hero .stamp { margin-top: 10px; }
+  .herochip { color: var(--ink-muted); font-size: 12px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .hero .stamp { margin-top: 2px; }
   .breedbar { display: flex; height: 20px; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; }
   .breedbar span { display: block; height: 100%; }
   .breedlist { display: flex; flex-wrap: wrap; gap: 7px 20px; font-size: 14px; }
@@ -235,6 +236,7 @@
         <div class="breedbar" id="breedBar"></div>
         <div class="breedlist" id="breedList"></div>
         <div class="breedmeta" id="breedMeta"></div>
+        <div class="herochip" id="heroChip"></div>
         <div class="stamp" id="stamp"></div>
       </div>
     </div>
@@ -899,6 +901,7 @@ function renderHero(dog) {
   // health flags
   document.getElementById("heroFlags").innerHTML =
     (prof.health_flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("");
+  document.getElementById("heroChip").textContent = prof.microchip ? `Microchip ${prof.microchip}` : "";
   // breed mix
   const dna = (cfg.dna || {})[dog], bar = document.getElementById("breedBar"),
         list = document.getElementById("breedList"), meta = document.getElementById("breedMeta");
