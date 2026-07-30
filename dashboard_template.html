@@ -893,7 +893,7 @@ function renderHero(dog) {
   }
   if (prof.adopted) vit.push(`adopted ${fmtBirth(prof.adopted)}`);
   if (prof.sex) vit.push(esc(prof.sex));
-  if (prof.microchip) vit.push(`<span class="d">microchip ${esc(prof.microchip)}</span>`);
+  if (prof.microchip) vit.push(`<span class="d">microchip #${esc(prof.microchip)}</span>`);
   document.getElementById("heroVitals").innerHTML = vit.join(" · ");
   // vaccinations + link to source records
   const vax = (DATA.vax || {})[dog] || [];
