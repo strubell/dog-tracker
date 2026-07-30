@@ -718,9 +718,13 @@ def _add_years(iso, n):
     return "-".join(parts)
 
 
+_VAX_SHORT = {"Distemper": "DHPP", "Leptospirosis": "Lepto", "Parainfluenza": "PI"}
+
+
 def load_vax(cfg):
-    """Compact per-dog vaccination summary: latest date per core vaccine group,
-    with a computed due date and an `expired` flag (past due)."""
+    """Per-dog vaccination summary. Prefers the authoritative vaccines_status
+    block ('Name (due YYYY-MM-DD)' entries); expired = past due date. Falls back
+    to latest-per-group from vaccination_history with computed due dates."""
     import re
     today_str = datetime.now(tz()).date().isoformat()
     out = {}
@@ -729,24 +733,32 @@ def load_vax(cfg):
         if not p.exists():
             continue
         try:
-            hist = json.loads(p.read_text()).get("vaccination_history", [])
+            raw = json.loads(p.read_text())
         except Exception:
             continue
-        latest = {}
-        for e in hist:
-            m = re.match(r"(\d{4}(?:-\d{2}){0,2})", str(e.get("date", "")))
-            date = m.group(1) if m else ""
-            names = " ".join(str(x) for x in (e.get("vaccines") or [e.get("vaccine")]) if x).lower()
-            for label, keys in _VAX_GROUPS:
-                if any(k in names for k in keys) and date > latest.get(label, ""):
-                    latest[label] = date
+        current = ((raw.get("vaccines_status") or {}).get("current")) or []
         items = []
-        for label, _ in _VAX_GROUPS:
-            if label not in latest:
-                continue
-            dt = latest[label]
-            due = _add_years(dt, _VAX_INTERVAL_YEARS.get(label, 1))
-            items.append({"name": label, "date": dt, "due": due, "expired": due < today_str})
+        if current:
+            for entry in current:
+                m = re.match(r"(.+?)\s*\(due\s*([0-9-]+)\)", str(entry))
+                name = (m.group(1) if m else str(entry)).strip()
+                due = (m.group(2) if m else "").strip()
+                items.append({"name": _VAX_SHORT.get(name, name), "due": due,
+                              "expired": bool(due) and due < today_str})
+        else:
+            hist = raw.get("vaccination_history", [])
+            latest = {}
+            for e in hist:
+                mm = re.match(r"(\d{4}(?:-\d{2}){0,2})", str(e.get("date", "")))
+                date = mm.group(1) if mm else ""
+                names = " ".join(str(x) for x in (e.get("vaccines") or [e.get("vaccine")]) if x).lower()
+                for label, keys in _VAX_GROUPS:
+                    if any(k in names for k in keys) and date > latest.get(label, ""):
+                        latest[label] = date
+            for label, _ in _VAX_GROUPS:
+                if label in latest:
+                    due = _add_years(latest[label], _VAX_INTERVAL_YEARS.get(label, 1))
+                    items.append({"name": label, "due": due, "expired": due < today_str})
         if items:
             out[d] = items
     return out

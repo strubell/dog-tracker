@@ -899,8 +899,11 @@ function renderHero(dog) {
   const link = prof.vet_records_pdf
     ? ` · <a href="${esc(prof.vet_records_pdf)}" target="_blank" rel="noopener">records ↗</a>` : "";
   document.getElementById("heroVax").innerHTML = vax.length
-    ? `<b>Vaccines:</b> ${vax.map(v => { const t = `${esc(v.name)} ${v.date}`;
-        return v.expired ? `<span class="vexp" title="due ${v.due} — expired">${t}</span>` : t;
+    ? `<b>Vaccines:</b> ${vax.map(v => {
+        const due = v.due ? ` due ${v.due}` : "";
+        return v.expired
+          ? `<span class="vexp" title="overdue">${esc(v.name)}${due}</span>`
+          : `${esc(v.name)}<span class="d">${due}</span>`;
       }).join(" · ")}${link}` : "";
   // health flags
   document.getElementById("heroFlags").innerHTML =
