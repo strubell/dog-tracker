@@ -191,6 +191,7 @@
   .vet .vh-item[open] > summary::before { content: "▾"; }
   .vet .vh-item > summary b { font-weight: 600; }
   .vet .vh-item .d { color: var(--ink-muted); }
+  .vet .srclink { color: var(--series); text-decoration: none; font-size: 12px; white-space: nowrap; margin-left: 6px; }
   .vet .vbody { margin: 0 0 12px 22px; }
   .vet .vline { font-size: 13px; line-height: 1.45; margin: 3px 0; }
   .vet .vline b { color: var(--ink-2); }
@@ -934,12 +935,17 @@ function renderVet(dog) {
     `Documented visits, newest first · ${items.length} on record`;
   document.getElementById("vetList").innerHTML = items.map(e => {
     const loc = [e.provider, e.weight != null ? e.weight + " lb" : ""].filter(Boolean).join(" · ");
+    const src = (e.sources || []).map((p, i) =>
+      `<a class="srclink" href="${esc(p)}" target="_blank" rel="noopener">source${e.sources.length > 1 ? " " + (i + 1) : ""} ↗</a>`).join(" ");
     const summary = `<summary><b>${e.date || ""}</b>${e.type ? " · " + esc(e.type) : ""}` +
-                    `${loc ? ` <span class="d">— ${esc(loc)}</span>` : ""}</summary>`;
+                    `${loc ? ` <span class="d">— ${esc(loc)}</span>` : ""}${src ? " " + src : ""}</summary>`;
     const lines = (e.lines || []).map(l =>
       `<div class="vline"><b>${esc(l.label)}:</b> ${esc(l.text)}</div>`).join("");
     return `<details class="vh-item">${summary}<div class="vbody">${lines}</div></details>`;
   }).join("");
+  // clicking a source link opens the PDF without toggling the expander
+  document.getElementById("vetList").querySelectorAll(".srclink").forEach(a =>
+    a.addEventListener("click", ev => ev.stopPropagation()));
 }
 
 // ---- medications calendar (per dog, one month at a time) --------------------------

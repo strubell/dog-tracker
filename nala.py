@@ -848,8 +848,37 @@ def cmd_med(args):
     cmd_build(args)
 
 
+def _resolve_record_pdf(filename, actual):
+    """Match a (possibly mangled) source filename to a real file in vet_records/.
+    Returns the actual basename, or None. PDFs and record images both count."""
+    import os, re
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+    key = norm(filename)
+    for f in actual:                       # exact (normalized) match
+        if norm(f) == key:
+            return f
+    m = re.search(r"cn\d+", key)           # by clinical-note number token
+    if m:
+        for f in actual:
+            if m.group(0) in norm(f):
+                return f
+    for f in actual:                       # filename embedded in a longer ref
+        nf = norm(f)                        # e.g. "Invoices.pdf invoice 597888"
+        if len(nf) >= 6 and key.startswith(nf):
+            return f
+    best, blen = None, 0                   # longest shared prefix (>=12)
+    for f in actual:
+        c = len(os.path.commonprefix([norm(f), key]))
+        if c > blen and c >= 12:
+            best, blen = f, c
+    return best
+
+
 def load_vet(cfg):
-    """Per-dog vet encounter timeline from data/<dog>_vet_records.json."""
+    """Per-dog vet encounter timeline from data/<dog>_vet_records.json, with each
+    encounter linked to its source document in vet_records/ where resolvable."""
+    recdir = BASE / "vet_records"
+    actual = [f.name for f in recdir.iterdir()] if recdir.is_dir() else []
     out = {}
     for d in dog_names(cfg):
         p = DATA / f"{d.lower()}_vet_records.json"
@@ -859,6 +888,15 @@ def load_vet(cfg):
             raw = json.loads(p.read_text())
         except Exception:
             continue
+        # doc_id -> served path, resolved against the real files on disk
+        docmap = {}
+        for sd in raw.get("source_documents", []):
+            fn = sd.get("filename", "")
+            if fn.endswith(".json"):        # internal (owner tracker), not a document
+                continue
+            match = _resolve_record_pdf(fn, actual)
+            if match:
+                docmap[sd.get("doc_id")] = "vet_records/" + match
         items = []
         for e in raw.get("encounters", []):
             lines = []
@@ -870,12 +908,26 @@ def load_vet(cfg):
                             text = "$" + text
                         lines.append({"label": label, "text": text})
                         break
+            src = e.get("source")
+            ids = src if isinstance(src, list) else [src]
+            paths = []
+            for i in ids:
+                if not i:
+                    continue
+                pth = docmap.get(i)         # doc_id, else treat as a raw filename
+                if not pth:
+                    match = _resolve_record_pdf(i, actual)
+                    if match:
+                        pth = "vet_records/" + match
+                if pth and pth not in paths:
+                    paths.append(pth)
             items.append({
                 "date": e.get("date"),
                 "provider": e.get("provider"),
                 "type": e.get("type"),
                 "weight": e.get("weight_lb"),
                 "lines": lines,
+                "sources": paths,
             })
         items.sort(key=lambda x: (x["date"] or ""), reverse=True)
         if items:
@@ -982,12 +1034,19 @@ def cmd_serve(args):
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 return self._send(200, render_html(live=True), "text/html; charset=utf-8")
-            # serve record PDFs under the project dir (read-only, .pdf only, no traversal)
+            # serve source records (read-only): PDFs anywhere under the project dir,
+            # image records only from vet_records/ so private photos aren't exposed.
             path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
-            if path.endswith(".pdf"):
+            _CT = {".pdf": "application/pdf", ".jpg": "image/jpeg",
+                   ".jpeg": "image/jpeg", ".png": "image/png"}
+            ext = os.path.splitext(path)[1].lower()
+            if ext in _CT:
                 target = (BASE / path.lstrip("/")).resolve()
-                if str(target).startswith(str(BASE.resolve())) and target.is_file():
-                    return self._send(200, target.read_bytes(), "application/pdf")
+                recdir = (BASE / "vet_records").resolve()
+                ok_dir = ext == ".pdf" or str(target).startswith(str(recdir))
+                if (str(target).startswith(str(BASE.resolve()))
+                        and ok_dir and target.is_file()):
+                    return self._send(200, target.read_bytes(), _CT[ext])
                 return self._send(404, "not found", "text/plain")
             self._send(404, "not found", "text/plain")
 
