@@ -254,6 +254,10 @@
   .mdot { width: 7px; height: 7px; border-radius: 50%; }
   #tip .tipcat { font-weight: 600; }
   .mdot.skip { background: transparent !important; border: 1.5px solid var(--ink-muted); }
+  .mdot.due { background: transparent !important; border: 1.5px solid; }
+  .mednext { font-size: 12px; color: var(--ink-2); margin-top: 8px; display: flex;
+             flex-direction: column; gap: 4px; }
+  .mednext .sw { width: 10px; height: 10px; display: inline-block; margin-right: 7px; vertical-align: -1px; }
   .mededitor { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); font-size: 14px; }
   .mededitor.hide { display: none; }
   .mededitor input { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
@@ -348,6 +352,7 @@
     </div>
     <div class="scroll"><div class="medgrid" id="medGrid"></div></div>
     <div class="legend" id="medLegend"></div>
+    <div class="mednext" id="medDue"></div>
     <div class="mededitor hide" id="medEditor"></div>
   </div>
 
@@ -1092,6 +1097,8 @@ function renderMeds(dog) {
   let html = ["S", "M", "T", "W", "T", "F", "S"].map(d => `<div class="dow">${d}</div>`).join("");
   for (let i = 0; i < startPad; i++) html += `<div class="medcell blank"></div>`;
   const seen = new Map();   // category key -> colour
+  const recurring = ((DATA.meds || {})[dog] || {}).recurring || [];
+  let dueShown = false;
   for (let day = 1; day <= daysIn; day++) {
     const dt = new Date(y, mo, day), iso = localISO(dt), meds = medsOn(dog, iso);
     // one dot per category present that day; a dot is "skipped" only if every med in it was skipped
@@ -1105,13 +1112,21 @@ function renderMeds(dog) {
       if (!m.skipped) g.skipAll = false;
     }
     const ordered = [...groups.entries()].sort((a, b) => MED_CAT_ORDER.indexOf(a[0]) - MED_CAT_ORDER.indexOf(b[0]));
-    const dots = ordered.map(([, g]) =>
+    let dots = ordered.map(([, g]) =>
       `<span class="mdot${g.skipAll ? " skip" : ""}" style="background:${g.color}"></span>`).join("");
-    const tip = meds.length ? `<b>${fmtDay(dt)}</b>` + ordered.map(([k, g]) =>
+    // a hollow ring marks a recurring med's next-due day
+    const due = recurring.filter(r => r.next_due === iso);
+    for (const r of due) {
+      const c = medCat({ name: r.name });
+      seen.set(c.key, c.color); dueShown = true;
+      dots += `<span class="mdot due" style="border-color:${c.color}"></span>`;
+    }
+    const tipRows = ordered.map(([k, g]) =>
       `<span class="tipcat">${esc(k)}</span> ` + g.meds.map(m =>
         `${m.skipped ? "✗ " : ""}${esc(m.name)}${m.dose ? " " + esc(m.dose) : ""}` +
-        `${m.freq ? " (" + esc(m.freq) + ")" : ""}`).join(", ")
-      ).join("<br>") : "";
+        `${m.freq ? " (" + esc(m.freq) + ")" : ""}`).join(", "))
+      .concat(due.map(r => `${esc(r.name)} due`));
+    const tip = tipRows.length ? `<b>${fmtDay(dt)}</b>` + tipRows.join("<br>") : "";
     html += `<div class="medcell clickable${+dt === +today ? " today" : ""}${dt > today ? " future" : ""}" data-iso="${iso}"` +
             `${tip ? ` data-tip="${esc(tip)}"` : ""}><div class="dnum">${day}</div><div class="mdots">${dots}</div></div>`;
   }
@@ -1120,7 +1135,16 @@ function renderMeds(dog) {
   document.getElementById("medLegend").innerHTML = cats.length
     ? cats.map(([k, col]) => `<span class="sw" style="background:${col};border-radius:50%"></span><span>${esc(k)}</span>`).join("")
       + `<span class="sw skip" style="background:transparent;border:1.5px solid var(--ink-muted);border-radius:50%"></span><span>skipped</span>`
+      + (dueShown ? `<span class="sw" style="background:transparent;border:1.5px solid var(--ink-2);border-radius:50%"></span><span>due</span>` : "")
     : `<span>No medications this month.</span>`;
+  // recurring meds: show the projected next dose regardless of which month is on screen
+  const upcoming = recurring.filter(r => r.next_due);
+  document.getElementById("medDue").innerHTML = upcoming.map(r => {
+    const c = medCat({ name: r.name });
+    const d = new Date(r.next_due + "T00:00:00");
+    return `<div><span class="sw" style="background:${c.color};border-radius:50%"></span>` +
+      `${esc(r.name)} — next due ${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</div>`;
+  }).join("");
   if (DATA.live && window.openMedEditor)
     grid.querySelectorAll(".medcell.clickable").forEach(c => c.onclick = () => window.openMedEditor(dog, c.dataset.iso));
 }

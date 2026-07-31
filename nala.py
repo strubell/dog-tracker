@@ -809,9 +809,37 @@ def log_med(dog, d, skip=None, add=None):
     return day
 
 
+def _add_months(iso, n):
+    """Add n calendar months to a YYYY-MM-DD date, clamping the day to month end."""
+    import calendar
+    y, m, d = (int(x) for x in iso.split("-"))
+    idx = (m - 1) + n
+    y += idx // 12
+    m = idx % 12 + 1
+    d = min(d, calendar.monthrange(y, m)[1])
+    return f"{y:04d}-{m:02d}-{d:02d}"
+
+
+def _recurring_status(prof, log):
+    """For each recurring med, find the last administration (from the med log,
+    else the configured seed) and project the next due date by its cadence."""
+    out = []
+    for rm in prof.get("recurring_medications", []):
+        match = (rm.get("match") or rm.get("name", "")).lower()
+        given = [dt for dt, rec in log.items()
+                 for a in (rec.get("add") or []) if match in (a.get("name", "") or "").lower()]
+        if rm.get("last_given"):
+            given.append(rm["last_given"])
+        last = max(given) if given else None
+        nxt = _add_months(last, rm.get("cadence_months", 1)) if last else None
+        out.append({"name": rm.get("name"), "last_given": last,
+                    "next_due": nxt, "cadence_months": rm.get("cadence_months", 1)})
+    return out
+
+
 def load_meds(cfg):
     """Per-dog meds: standing daily meds (config), past courses (vet history),
-    and the ad-hoc / skipped-dose log kept here."""
+    recurring meds with a projected next-due date, and the ad-hoc/skip log."""
     store = load(MED_LOG, {})
     out = {}
     for dg in dog_names(cfg):
@@ -823,8 +851,10 @@ def load_meds(cfg):
                 courses = _med_courses(p)
             except Exception:
                 pass
+        log = store.get(dg, {})
         out[dg] = {"daily": prof.get("daily_medications", []),
-                   "courses": courses, "log": store.get(dg, {})}
+                   "courses": courses, "log": log,
+                   "recurring": _recurring_status(prof, log)}
     return out
 
 
