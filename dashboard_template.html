@@ -183,9 +183,15 @@
   .breedlist .bi { display: flex; align-items: center; gap: 7px; }
   .breedlist .dot { width: 11px; height: 11px; border-radius: 3px; flex: none; }
   .breedlist .dnalink { margin-left: auto; color: var(--series); text-decoration: none; white-space: nowrap; }
-  .origins .origin-gallery { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-  .origins .origin-gallery img { height: 150px; width: auto; max-width: 100%; border-radius: 8px;
+  .origins .origin-gallery { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .origins .origin-fig { margin: 0; }
+  .origins .origin-fig img { height: 160px; width: auto; max-width: 100%; border-radius: 8px;
      object-fit: cover; display: block; background: var(--grid); }
+  .origins .origin-fig.sib img { height: 120px; }
+  .origins .origin-fig figcaption { font-size: 11.5px; color: var(--ink-muted); margin-top: 4px; text-align: center; }
+  .origins .origin-sibs { margin: 14px 0 4px; }
+  .origins .origin-sibs-h { font-size: 12px; font-weight: 600; color: var(--ink-2);
+     text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px; }
   .origins .origin-rescue { font-weight: 600; font-size: 15px; }
   .origins .origin-rescue .d { color: var(--ink-muted); font-weight: 400; }
   .origins .origin-link { color: var(--series); text-decoration: none; font-weight: 400; font-size: 13px; margin-left: 6px; white-space: nowrap; }
@@ -955,10 +961,19 @@ function renderOrigins(dog) {
   const o = (DATA.origins || {})[dog];
   card.style.display = (card.dataset.onpage !== "0" && o) ? "" : "none";
   if (!o) return;
-  const photos = (DATA.originPhotos || {})[dog] || [];
+  const photos = (o.photos || []).filter(p => p.src);
   const gallery = photos.length
-    ? `<div class="origin-gallery">${photos.map(src =>
-        `<a href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${esc(dog)} adoption photo" loading="lazy"></a>`).join("")}</div>`
+    ? `<div class="origin-gallery">${photos.map(p =>
+        `<figure class="origin-fig"><a href="${p.src}" target="_blank" rel="noopener">` +
+        `<img src="${p.src}" alt="${esc(p.caption || dog)}" loading="lazy"></a>` +
+        `${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
+    : "";
+  const sibs = (o.siblings || []).filter(s => s.src);
+  const siblings = sibs.length
+    ? `<div class="origin-sibs"><div class="origin-sibs-h">Littermates</div>` +
+      `<div class="origin-gallery">${sibs.map(s =>
+        `<figure class="origin-fig sib"><img src="${s.src}" alt="${esc(s.name)}" loading="lazy">` +
+        `<figcaption>${esc(s.name)}</figcaption></figure>`).join("")}</div></div>`
     : "";
   const head =
     `<div class="origin-rescue">${esc(o.rescue || "")}` +
@@ -979,7 +994,7 @@ function renderOrigins(dog) {
   const src = o.source
     ? `<div class="origin-src"><a class="srclink" href="${esc(o.source)}" target="_blank" rel="noopener">${esc(o.source_label || "source")} ↗</a></div>`
     : "";
-  document.getElementById("originBody").innerHTML = gallery + head + quote + note + tl + src;
+  document.getElementById("originBody").innerHTML = gallery + head + quote + note + siblings + tl + src;
 }
 
 function renderVet(dog) {

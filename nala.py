@@ -1019,20 +1019,19 @@ def render_html(live=False):
                 photos[d] = f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode()
                 break
     payload["photos"] = photos
-    # adoption-listing photos per dog, from origins/<dog>/*.{jpg,jpeg,png} (sorted)
-    origin_photos = {}
-    for d in dog_names(cfg):
-        ddir = BASE / "origins" / d.lower()
-        if not ddir.is_dir():
-            continue
-        uris = []
-        for f in sorted(ddir.iterdir()):
-            mime = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png"}.get(f.suffix.lower())
-            if mime:
-                uris.append(f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode())
-        if uris:
-            origin_photos[d] = uris
-    payload["originPhotos"] = origin_photos
+    # embed origin photos (gallery + labelled siblings) as base64 data URIs,
+    # resolving each entry's filename against origins/<dog>/
+    def _embed_origin(dog, fname):
+        f = BASE / "origins" / dog.lower() / (fname or "")
+        mime = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png"}.get(f.suffix.lower())
+        if fname and mime and f.is_file():
+            return f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode()
+        return None
+    for d, o in (payload.get("origins") or {}).items():
+        for entry in list(o.get("photos", [])) + list(o.get("siblings", [])):
+            src = _embed_origin(d, entry.get("file", ""))
+            if src:
+                entry["src"] = src
     blob = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     return TEMPLATE.read_text().replace("/*__DATA__*/null", blob)
 

@@ -24,4 +24,9 @@ __pycache__/
 
 # Documents / records (local only)
 *.pdf
+*.zip
 .DS_Store
+
+# Personal media directories (baby/origin photos stay local)
+/baby_photos/
+/origins/
