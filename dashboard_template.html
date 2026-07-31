@@ -183,6 +183,23 @@
   .breedlist .bi { display: flex; align-items: center; gap: 7px; }
   .breedlist .dot { width: 11px; height: 11px; border-radius: 3px; flex: none; }
   .breedlist .dnalink { margin-left: auto; color: var(--series); text-decoration: none; white-space: nowrap; }
+  .origins .origin-gallery { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .origins .origin-gallery img { height: 150px; width: auto; max-width: 100%; border-radius: 8px;
+     object-fit: cover; display: block; background: var(--grid); }
+  .origins .origin-rescue { font-weight: 600; font-size: 15px; }
+  .origins .origin-rescue .d { color: var(--ink-muted); font-weight: 400; }
+  .origins .origin-link { color: var(--series); text-decoration: none; font-weight: 400; font-size: 13px; margin-left: 6px; white-space: nowrap; }
+  .origins .origin-listed { font-size: 13px; margin-top: 3px; }
+  .origins .origin-listed .d { color: var(--ink-muted); }
+  .origins .origin-quote { margin: 14px 0; padding: 6px 0 6px 14px; border-left: 3px solid var(--grid);
+     color: var(--ink-2); font-style: italic; font-size: 13.5px; line-height: 1.55; }
+  .origins .origin-quote cite { display: block; margin-top: 8px; font-style: normal; font-size: 12px; color: var(--ink-muted); }
+  .origins .origin-note { font-size: 13px; line-height: 1.5; color: var(--ink-2); margin: 10px 0; }
+  .origins .origin-tl { list-style: none; padding: 0; margin: 14px 0 0; }
+  .origins .origin-tl li { font-size: 13px; line-height: 1.5; padding: 6px 0; border-top: 1px solid var(--grid); }
+  .origins .origin-tl li b { font-variant-numeric: tabular-nums; margin-right: 8px; color: var(--ink-2); }
+  .origins .origin-src { margin-top: 12px; }
+  .origins .srclink { color: var(--series); text-decoration: none; font-size: 12px; }
   .vet .vh-item { border-bottom: 1px solid var(--grid); }
   .vet .vh-item:last-child { border-bottom: none; }
   .vet .vh-item > summary { cursor: pointer; list-style: none; padding: 10px 0; font-size: 14px; }
@@ -347,6 +364,12 @@
     <div class="sub" id="notesSub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
     <ul class="notes" id="notes"></ul>
     <button class="btn" id="notesToggle" style="display:none; margin-top:10px"></button>
+  </div>
+
+  <div class="card cond" id="originCard" data-page="Nala Pepper" style="display:none">
+    <h2>Origins</h2>
+    <div class="sub" id="originSub">How she came home</div>
+    <div class="origins" id="originBody"></div>
   </div>
 
   <div class="card cond" id="vetCard" data-page="Nala Pepper" style="display:none">
@@ -927,6 +950,38 @@ function renderHero(dog) {
 }
 
 // ---- vet history (per dog; card hidden if that dog has no records) ----------------
+function renderOrigins(dog) {
+  const card = document.getElementById("originCard");
+  const o = (DATA.origins || {})[dog];
+  card.style.display = (card.dataset.onpage !== "0" && o) ? "" : "none";
+  if (!o) return;
+  const photos = (DATA.originPhotos || {})[dog] || [];
+  const gallery = photos.length
+    ? `<div class="origin-gallery">${photos.map(src =>
+        `<a href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${esc(dog)} adoption photo" loading="lazy"></a>`).join("")}</div>`
+    : "";
+  const head =
+    `<div class="origin-rescue">${esc(o.rescue || "")}` +
+    (o.location ? ` <span class="d">· ${esc(o.location)}</span>` : "") +
+    (o.website ? ` <a class="origin-link" href="${esc(o.website)}" target="_blank" rel="noopener">${esc(o.website_label || o.website)} ↗</a>` : "") +
+    `</div>` +
+    (o.listing_name || o.listing_descr
+      ? `<div class="origin-listed">Listed as <b>${esc(o.listing_name || dog)}</b>${o.listing_descr ? ` <span class="d">· ${esc(o.listing_descr)}</span>` : ""}</div>`
+      : "");
+  const quote = o.listing_text
+    ? `<blockquote class="origin-quote">${esc(o.listing_text)}${o.listing_by ? `<cite>${esc(o.listing_by)}</cite>` : ""}</blockquote>`
+    : "";
+  const note = o.note ? `<div class="origin-note">${esc(o.note)}</div>` : "";
+  const tl = (o.timeline || []).length
+    ? `<ul class="origin-tl">${o.timeline.map(t =>
+        `<li><b>${esc(t.date || "")}</b> ${esc(t.text || "")}</li>`).join("")}</ul>`
+    : "";
+  const src = o.source
+    ? `<div class="origin-src"><a class="srclink" href="${esc(o.source)}" target="_blank" rel="noopener">${esc(o.source_label || "source")} ↗</a></div>`
+    : "";
+  document.getElementById("originBody").innerHTML = gallery + head + quote + note + tl + src;
+}
+
 function renderVet(dog) {
   const card = document.getElementById("vetCard");
   const items = (DATA.vet || {})[dog] || [];
@@ -1216,6 +1271,7 @@ function setPage(dog) {
   else { row.appendChild(feed); feed.style.marginBottom = "0"; }
   renderHero(dog);
   renderNotes(dog);
+  renderOrigins(dog);
   renderVet(dog);
   renderMeds(dog);
   renderDiarrhea(dog);

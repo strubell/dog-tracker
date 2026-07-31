@@ -935,6 +935,18 @@ def load_vet(cfg):
     return out
 
 
+def load_origins(cfg):
+    """Per-dog adoption / origin story from data/origins.json (optional)."""
+    p = DATA / "origins.json"
+    if not p.exists():
+        return {}
+    try:
+        raw = json.loads(p.read_text())
+    except Exception:
+        return {}
+    return {d: raw[d] for d in dog_names(cfg) if d in raw}
+
+
 def load_gi(cfg):
     """Merge each dog's compiled history with any incidents logged here."""
     days, table = {}, {}
@@ -985,6 +997,7 @@ def build_payload(cfg, db):
         "meals": load(MEALS, {}),
         "gi": load_gi(cfg),
         "vet": load_vet(cfg),
+        "origins": load_origins(cfg),
         "vax": load_vax(cfg),
         "meds": load_meds(cfg),
         "generated": datetime.now(tz()).isoformat(timespec="minutes"),
@@ -1006,6 +1019,20 @@ def render_html(live=False):
                 photos[d] = f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode()
                 break
     payload["photos"] = photos
+    # adoption-listing photos per dog, from origins/<dog>/*.{jpg,jpeg,png} (sorted)
+    origin_photos = {}
+    for d in dog_names(cfg):
+        ddir = BASE / "origins" / d.lower()
+        if not ddir.is_dir():
+            continue
+        uris = []
+        for f in sorted(ddir.iterdir()):
+            mime = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png"}.get(f.suffix.lower())
+            if mime:
+                uris.append(f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode())
+        if uris:
+            origin_photos[d] = uris
+    payload["originPhotos"] = origin_photos
     blob = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     return TEMPLATE.read_text().replace("/*__DATA__*/null", blob)
 
