@@ -86,6 +86,10 @@
   .toolbar input, .toolbar select { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
                    border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
   .toolbar .grp { display: flex; gap: 6px; align-items: center; }
+  .logrow { display: none; gap: 6px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .logrow.show { display: flex; }
+  .logrow input { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
+                  border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
   .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
   .tabs { display: flex; gap: 8px; margin: 18px 0 8px; }
   .tab { font: inherit; font-size: 15px; font-weight: 700; padding: 8px 20px; border-radius: 999px;
@@ -268,12 +272,6 @@
     <div class="banner" id="banner" data-page="Nala"><span class="dot">⚠︎</span><span id="bannerText"></span></div>
     <div class="toolbar" id="toolbar">
       <button class="btn primary" id="syncBtn">↻ Sync now</button>
-      <div class="sep"></div>
-      <div class="grp"><input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
-        <button class="btn" id="wBtn">Log weight</button></div>
-      <div class="sep"></div>
-      <div class="grp"><input id="nIn" type="text" placeholder="add a note…" style="width:180px">
-        <button class="btn" id="nBtn">Add note</button></div>
     </div>
   </header>
 
@@ -336,7 +334,7 @@
 
   <div class="card" id="medCard" data-page="Nala Pepper">
     <h2>Medications</h2>
-    <div class="sub">Daily meds auto-fill each day; tap a day to log a skipped dose or a one-off med</div>
+    <div class="sub">Daily meds auto-fill each day; tap a day to log a skipped dose or an extra med</div>
     <div class="medhead">
       <button class="btn" id="medPrev">‹</button>
       <span class="mlabel" id="medLabel"></span>
@@ -354,6 +352,8 @@
       <div class="legend" id="weightLegend"></div>
       <div class="scroll" id="weightHist"></div>
       <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
+      <div class="logrow"><input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
+        <button class="btn" id="wBtn">Log weight</button></div>
     </div>
     <div class="card" data-page="Nala">
       <h2>Plan progress</h2>
@@ -375,6 +375,8 @@
   <div class="card cond" id="notesCard" data-page="Nala Pepper" style="display:none">
     <h2>Notes</h2>
     <div class="sub" id="notesSub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
+    <div class="logrow" style="margin-bottom:12px"><input id="nIn" type="text" placeholder="add a note…" style="width:220px">
+      <button class="btn" id="nBtn">Add note</button></div>
     <ul class="notes" id="notes"></ul>
     <button class="btn" id="notesToggle" style="display:none; margin-top:10px"></button>
   </div>
@@ -1050,6 +1052,7 @@ const MED_CATS = [
   { key: "Pain relief", color: "#e0a63a", re: [/\bpain\b/i, /nsaid/i, /meloxicam|metacam/i, /carprofen|rimadyl/i, /methadone/i, /buprenorphine|simbadol/i, /bupivacaine|lidocaine/i, /gabapentin/i, /tramadol/i, /galliprant|grapiprant/i, /onsior|robenacoxib/i] },
   { key: "Flea/tick",   color: "#ef86b7", re: [/flea|tick/i, /bravecto|fluralaner/i, /simparica|sarolaner/i, /nexgard|afoxolaner/i, /frontline|fipronil/i, /seresto/i, /credelio|lotilaner/i, /revolution|selamectin/i, /vectra/i] },
   { key: "Dewormer",    color: "#3fb27f", re: [/dewormer|deworm|anthelmintic|wormer/i, /heartworm|heartgard/i, /panacur|fenbendazole/i, /pyrantel|strongid/i, /praziquantel|drontal/i, /interceptor|milbemycin/i, /triheart|tri-heart/i, /ivomec|ivermectin/i, /moxidectin|advantage/i] },
+  { key: "Probiotic",   color: "#22b8cf", re: [/probiotic|proviable|fortiflora|visbiome|synbiotic|prostora/i] },
 ];
 const MED_OTHER = { key: "Other", color: "#9aa4b2" };
 const MED_CAT_ORDER = MED_CATS.map(c => c.key).concat(MED_OTHER.key);
@@ -1102,7 +1105,7 @@ function renderMeds(dog) {
     const tip = meds.length ? `<b>${fmtDay(dt)}</b>` + ordered.map(([k, g]) =>
       `<span class="tipcat">${esc(k)}</span> ` + g.meds.map(m =>
         `${m.skipped ? "✗ " : ""}${esc(m.name)}${m.dose ? " " + esc(m.dose) : ""}` +
-        `${m.freq ? " (" + esc(m.freq) + ")" : ""}${m.kind === "one-off" ? " · one-off" : m.kind === "course" ? " · course" : ""}`).join(", ")
+        `${m.freq ? " (" + esc(m.freq) + ")" : ""}`).join(", ")
       ).join("<br>") : "";
     html += `<div class="medcell clickable${+dt === +today ? " today" : ""}${dt > today ? " future" : ""}" data-iso="${iso}"` +
             `${tip ? ` data-tip="${esc(tip)}"` : ""}><div class="dnum">${day}</div><div class="mdots">${dots}</div></div>`;
@@ -1123,7 +1126,7 @@ const NOTES_PREVIEW = 5;
 function renderNotes(dog) {
   const card = document.getElementById("notesCard");
   const mine = DATA.notes.filter(n => (n.dog || cfg.dog) === dog).slice().reverse();
-  card.style.display = (card.dataset.onpage !== "0" && mine.length) ? "" : "none";
+  card.style.display = (card.dataset.onpage !== "0" && (mine.length || DATA.live)) ? "" : "none";
   document.getElementById("notesSub").textContent = dog === cfg.dog
     ? "Stairs hesitation, paw-licking, stiffness, hunger strikes, etc."
     : "Appetite, gut, and anything else notable";
@@ -1381,6 +1384,7 @@ if (DATA.live) {
   };
 
   document.getElementById("toolbar").classList.add("show");
+  document.querySelectorAll(".logrow").forEach(r => r.classList.add("show"));
 
   const card = document.getElementById("reviewCard");
   const list = document.getElementById("reviewList");
@@ -1565,9 +1569,9 @@ if (DATA.live) {
       (daily.length
         ? daily.map(m => `<label style="display:block;margin:4px 0"><input type="checkbox" class="medgiven" data-name="${esc(m.name)}" ${skip.has(m.name) ? "" : "checked"}> ${esc(m.name)} ${esc(m.dose || "")} <span class="d">given</span></label>`).join("")
         : `<div class="d">No standing daily meds.</div>`) +
-      (log.add || []).map(a => `<div class="d">＋ ${esc(a.name)} ${esc(a.dose || "")} (one-off)</div>`).join("") +
+      (log.add || []).map(a => `<div class="d">＋ ${esc(a.name)} ${esc(a.dose || "")}</div>`).join("") +
       `<div class="mgrp" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">` +
-      `<input id="medAddName" placeholder="one-off med…" style="width:150px">` +
+      `<input id="medAddName" placeholder="add a med…" style="width:150px">` +
       `<input id="medAddDose" placeholder="dose" style="width:90px">` +
       `<button class="btn primary" id="medSave">Save</button>` +
       `<button class="btn" id="medCancel">Cancel</button></div>`;
