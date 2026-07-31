@@ -190,7 +190,13 @@
   .origins .origin-gallery { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
   .origins .origin-fig { margin: 0; }
   .origins .origin-fig img { height: 160px; width: auto; max-width: 100%; border-radius: 8px;
-     object-fit: cover; display: block; background: var(--grid); }
+     object-fit: cover; display: block; background: var(--grid); cursor: zoom-in; }
+  .heropic { cursor: zoom-in; }
+  #lightbox { position: fixed; inset: 0; z-index: 1000; display: none; padding: 24px;
+     align-items: center; justify-content: center; background: rgba(0,0,0,0.85); cursor: zoom-out; }
+  #lightbox.show { display: flex; }
+  #lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 8px;
+     box-shadow: 0 10px 50px rgba(0,0,0,0.5); }
   .origins .origin-fig.sib img { height: 120px; }
   .origins .origin-fig figcaption { font-size: 11.5px; color: var(--ink-muted); margin-top: 4px; text-align: center; }
   .origins .origin-sibs { margin: 14px 0 4px; }
@@ -394,6 +400,7 @@
 </div>
 <div id="tip"></div>
 <div id="toast"></div>
+<div id="lightbox"><img alt=""></div>
 
 <script>
 const DATA = /*__DATA__*/null;
@@ -972,8 +979,7 @@ function renderOrigins(dog) {
   const photos = (o.photos || []).filter(p => p.src);
   const gallery = photos.length
     ? `<div class="origin-gallery">${photos.map(p =>
-        `<figure class="origin-fig"><a href="${p.src}" target="_blank" rel="noopener">` +
-        `<img src="${p.src}" alt="${esc(p.caption || dog)}" loading="lazy"></a>` +
+        `<figure class="origin-fig"><img src="${p.src}" alt="${esc(p.caption || dog)}" loading="lazy">` +
         `${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
     : "";
   const sibs = (o.siblings || []).filter(s => s.src);
@@ -997,8 +1003,7 @@ function renderOrigins(dog) {
     const ph = (list || []).filter(p => p.src);
     return ph.length
       ? `<div class="origin-gallery">${ph.map(p =>
-          `<figure class="origin-fig"><a href="${p.src}" target="_blank" rel="noopener">` +
-          `<img src="${p.src}" alt="${esc(p.caption || dog)}" loading="lazy"></a>` +
+          `<figure class="origin-fig"><img src="${p.src}" alt="${esc(p.caption || dog)}" loading="lazy">` +
           `${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
       : "";
   };
@@ -1369,6 +1374,18 @@ document.getElementById("medNext").onclick = () => { medMonth.setMonth(medMonth.
 for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderPepperKpis(d); }
 
 // ---- live mode (served by `nala.py serve`) ----------------------------------------
+// click any origin photo (or the hero photo) to view it full-size in a lightbox
+(() => {
+  const lb = document.getElementById("lightbox"), lbImg = lb.querySelector("img");
+  const close = () => { lb.classList.remove("show"); lbImg.removeAttribute("src"); };
+  document.addEventListener("click", e => {
+    const img = e.target.closest(".origin-fig img, .heropic");
+    if (img && img.getAttribute("src")) { lbImg.src = img.src; lb.classList.add("show"); }
+  });
+  lb.addEventListener("click", close);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+})();
+
 if (DATA.live) {
   const toast = document.getElementById("toast");
   const flash = (msg, ms = 2200) => {
