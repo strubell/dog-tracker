@@ -1028,7 +1028,10 @@ def render_html(live=False):
             return f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode()
         return None
     for d, o in (payload.get("origins") or {}).items():
-        for entry in list(o.get("photos", [])) + list(o.get("siblings", [])):
+        entries = list(o.get("photos", [])) + list(o.get("siblings", []))
+        for post in o.get("posts", []):        # posts may carry their own photos
+            entries += list(post.get("photos", []))
+        for entry in entries:
             src = _embed_origin(d, entry.get("file", ""))
             if src:
                 entry["src"] = src

@@ -379,7 +379,6 @@
 
   <div class="card cond" id="originCard" data-page="Nala Pepper" style="display:none">
     <h2>Origins</h2>
-    <div class="sub" id="originSub">How she came home</div>
     <div class="origins" id="originBody"></div>
   </div>
 
@@ -990,10 +989,20 @@ function renderOrigins(dog) {
       : "");
   const lead = o.origin_line ? `<div class="origin-lead">${esc(o.origin_line)}</div>` : "";
   const cite = p => [p.author, p.date].filter(Boolean).join(" · ");
+  const galleryOf = list => {
+    const ph = (list || []).filter(p => p.src);
+    return ph.length
+      ? `<div class="origin-gallery">${ph.map(p =>
+          `<figure class="origin-fig"><a href="${p.src}" target="_blank" rel="noopener">` +
+          `<img src="${p.src}" alt="${esc(p.caption || dog)}" loading="lazy"></a>` +
+          `${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
+      : "";
+  };
   const posts = (o.posts && o.posts.length)
     ? o.posts.map(p =>
         `${p.label ? `<div class="origin-post-label">${esc(p.label)}</div>` : ""}` +
-        `<blockquote class="origin-quote">${esc(p.text)}${cite(p) ? `<cite>${esc(cite(p))}</cite>` : ""}</blockquote>`).join("")
+        `<blockquote class="origin-quote">${esc(p.text)}${cite(p) ? `<cite>${esc(cite(p))}</cite>` : ""}</blockquote>` +
+        galleryOf(p.photos)).join("")
     : (o.listing_text
         ? `<blockquote class="origin-quote">${esc(o.listing_text)}${o.listing_by ? `<cite>${esc(o.listing_by)}</cite>` : ""}</blockquote>`
         : "");
