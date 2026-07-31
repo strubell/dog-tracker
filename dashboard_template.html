@@ -231,17 +231,19 @@
   .medhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .medhead .mlabel { font-weight: 600; min-width: 150px; text-align: center; }
   .medhead button { padding: 5px 14px; }
-  .medgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; min-width: 660px; }
-  .medgrid .dow { text-align: center; font-size: 11px; color: var(--ink-muted); }
-  .medcell { min-height: 54px; border: 1px solid var(--grid); border-radius: 7px; padding: 3px 5px; }
+  #medCard { max-width: 480px; }
+  .medgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; max-width: 430px; }
+  .medgrid .dow { text-align: center; font-size: 10px; color: var(--ink-muted); }
+  .medcell { min-height: 34px; border: 1px solid var(--grid); border-radius: 5px; padding: 2px 3px; }
   .medcell.blank { border: none; }
   .medcell.today { border-color: var(--series); box-shadow: inset 0 0 0 1px var(--series); }
   .medcell.future { opacity: 0.5; }
   .medcell.clickable { cursor: pointer; }
   .medcell.clickable:hover { background: var(--band); }
-  .medcell .dnum { font-size: 11px; color: var(--ink-muted); }
-  .medcell .mdots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
-  .mdot { width: 9px; height: 9px; border-radius: 50%; }
+  .medcell .dnum { font-size: 10px; color: var(--ink-muted); line-height: 1.1; }
+  .medcell .mdots { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 2px; }
+  .mdot { width: 7px; height: 7px; border-radius: 50%; }
+  #tip .tipcat { font-weight: 600; }
   .mdot.skip { background: transparent !important; border: 1.5px solid var(--ink-muted); }
   .mededitor { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); font-size: 14px; }
   .mededitor.hide { display: none; }
@@ -1028,18 +1030,26 @@ function renderVet(dog) {
 }
 
 // ---- medications calendar (per dog, one month at a time) --------------------------
-const MED_PAL = ["#5b8ff9", "#e8684a", "#61ddaa", "#f6a35c", "#9270ca", "#e0a63a", "#5ad8a6", "#d9534f"];
-let medMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-function medColorMap(dog) {
-  const M = (DATA.meds || {})[dog] || {};
-  const names = new Set();
-  (M.daily || []).forEach(m => names.add(m.name));
-  (M.courses || []).forEach(c => names.add(c.name));
-  Object.values(M.log || {}).forEach(l => (l.add || []).forEach(a => names.add(a.name)));
-  const map = {};
-  [...names].sort().forEach((n, i) => map[n] = MED_PAL[i % MED_PAL.length]);
-  return map;
+// Common meds/classes get a fixed colour; everything else groups under "Other".
+// First matching category wins, so order matters (e.g. Simparica → Flea/tick before Dewormer).
+const MED_CATS = [
+  { key: "Trazodone",   color: "#9270ca", re: [/trazodone/i] },
+  { key: "Antibiotic",  color: "#e8684a", re: [/antibiotic/i, /metronidazole|flagyl/i, /clavacillin|clavamox|amoxi/i, /cephalexin|cefpodoxime|simplicef|convenia/i, /doxycycline/i, /enrofloxacin|baytril/i, /clindamycin/i, /sulfamethoxazole|trimethoprim/i] },
+  { key: "Anaesthesia", color: "#5b8ff9", re: [/anaesth|anesth/i, /propofol/i, /dexmedetomidine|dexdomitor/i, /isoflurane|sevoflurane/i, /ketamine/i, /alfaxalone/i, /\bsedation|sedative/i] },
+  { key: "Pain relief", color: "#e0a63a", re: [/\bpain\b/i, /nsaid/i, /meloxicam|metacam/i, /carprofen|rimadyl/i, /methadone/i, /buprenorphine|simbadol/i, /bupivacaine|lidocaine/i, /gabapentin/i, /tramadol/i, /galliprant|grapiprant/i, /onsior|robenacoxib/i] },
+  { key: "Flea/tick",   color: "#ef86b7", re: [/flea|tick/i, /bravecto|fluralaner/i, /simparica|sarolaner/i, /nexgard|afoxolaner/i, /frontline|fipronil/i, /seresto/i, /credelio|lotilaner/i, /revolution|selamectin/i, /vectra/i] },
+  { key: "Dewormer",    color: "#3fb27f", re: [/dewormer|deworm|anthelmintic|wormer/i, /heartworm|heartgard/i, /panacur|fenbendazole/i, /pyrantel|strongid/i, /praziquantel|drontal/i, /interceptor|milbemycin/i, /triheart|tri-heart/i, /ivomec|ivermectin/i, /moxidectin|advantage/i] },
+];
+const MED_OTHER = { key: "Other", color: "#9aa4b2" };
+const MED_CAT_ORDER = MED_CATS.map(c => c.key).concat(MED_OTHER.key);
+// Classify by drug NAME only — matching the reason text misfiled things like a
+// probiotic "given with antibiotics" or an opioid used for perioperative pain.
+function medCat(m) {
+  const name = m.name || "";
+  for (const c of MED_CATS) if (c.re.some(r => r.test(name))) return c;
+  return MED_OTHER;
 }
+let medMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 function medsOn(dog, iso) {
   const M = (DATA.meds || {})[dog] || { daily: [], courses: [], log: {} };
   const log = (M.log || {})[iso] || {};
@@ -1056,27 +1066,40 @@ function medsOn(dog, iso) {
   return res;
 }
 function renderMeds(dog) {
-  const colors = medColorMap(dog);
   const y = medMonth.getFullYear(), mo = medMonth.getMonth();
   document.getElementById("medLabel").textContent =
     medMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const startPad = new Date(y, mo, 1).getDay(), daysIn = new Date(y, mo + 1, 0).getDate();
   let html = ["S", "M", "T", "W", "T", "F", "S"].map(d => `<div class="dow">${d}</div>`).join("");
   for (let i = 0; i < startPad; i++) html += `<div class="medcell blank"></div>`;
-  const seen = new Set();
+  const seen = new Map();   // category key -> colour
   for (let day = 1; day <= daysIn; day++) {
     const dt = new Date(y, mo, day), iso = localISO(dt), meds = medsOn(dog, iso);
-    meds.forEach(m => seen.add(m.name));
-    const dots = meds.map(m => `<span class="mdot${m.skipped ? " skip" : ""}" style="background:${colors[m.name] || 'var(--grid)'}"></span>`).join("");
-    const tip = meds.length ? `<b>${fmtDay(dt)}</b>` + meds.map(m =>
-      `${m.skipped ? "✗ " : ""}${esc(m.name)}${m.dose ? " " + esc(m.dose) : ""}` +
-      `${m.freq ? " (" + esc(m.freq) + ")" : ""}${m.kind === "one-off" ? " · one-off" : m.kind === "course" ? " · course" : ""}`).join("<br>") : "";
+    // one dot per category present that day; a dot is "skipped" only if every med in it was skipped
+    const groups = new Map();
+    for (const m of meds) {
+      const c = medCat(m);
+      seen.set(c.key, c.color);
+      if (!groups.has(c.key)) groups.set(c.key, { color: c.color, meds: [], skipAll: true });
+      const g = groups.get(c.key);
+      g.meds.push(m);
+      if (!m.skipped) g.skipAll = false;
+    }
+    const ordered = [...groups.entries()].sort((a, b) => MED_CAT_ORDER.indexOf(a[0]) - MED_CAT_ORDER.indexOf(b[0]));
+    const dots = ordered.map(([, g]) =>
+      `<span class="mdot${g.skipAll ? " skip" : ""}" style="background:${g.color}"></span>`).join("");
+    const tip = meds.length ? `<b>${fmtDay(dt)}</b>` + ordered.map(([k, g]) =>
+      `<span class="tipcat">${esc(k)}</span> ` + g.meds.map(m =>
+        `${m.skipped ? "✗ " : ""}${esc(m.name)}${m.dose ? " " + esc(m.dose) : ""}` +
+        `${m.freq ? " (" + esc(m.freq) + ")" : ""}${m.kind === "one-off" ? " · one-off" : m.kind === "course" ? " · course" : ""}`).join(", ")
+      ).join("<br>") : "";
     html += `<div class="medcell clickable${+dt === +today ? " today" : ""}${dt > today ? " future" : ""}" data-iso="${iso}"` +
             `${tip ? ` data-tip="${esc(tip)}"` : ""}><div class="dnum">${day}</div><div class="mdots">${dots}</div></div>`;
   }
   const grid = document.getElementById("medGrid"); grid.innerHTML = html; bindTips(grid);
-  document.getElementById("medLegend").innerHTML = seen.size
-    ? [...seen].sort().map(n => `<span class="sw" style="background:${colors[n]};border-radius:50%"></span><span>${esc(n)}</span>`).join("")
+  const cats = [...seen.entries()].sort((a, b) => MED_CAT_ORDER.indexOf(a[0]) - MED_CAT_ORDER.indexOf(b[0]));
+  document.getElementById("medLegend").innerHTML = cats.length
+    ? cats.map(([k, col]) => `<span class="sw" style="background:${col};border-radius:50%"></span><span>${esc(k)}</span>`).join("")
       + `<span class="sw skip" style="background:transparent;border:1.5px solid var(--ink-muted);border-radius:50%"></span><span>skipped</span>`
     : `<span>No medications this month.</span>`;
   if (DATA.live && window.openMedEditor)
