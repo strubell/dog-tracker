@@ -231,7 +231,6 @@
   .medhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .medhead .mlabel { font-weight: 600; min-width: 150px; text-align: center; }
   .medhead button { padding: 5px 14px; }
-  #medCard { max-width: 480px; }
   .medgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; max-width: 430px; }
   .medgrid .dow { text-align: center; font-size: 10px; color: var(--ink-muted); }
   .medcell { min-height: 34px; border: 1px solid var(--grid); border-radius: 5px; padding: 2px 3px; }
@@ -362,6 +361,9 @@
       <div class="scroll" id="weightChart"></div>
     </div>
   </div>
+
+  <!-- medications pair with feeding (Nala) or eating (Pepper); populated in setPage -->
+  <div class="duo" id="medPair" style="margin-bottom:16px"></div>
 
   <div class="card" id="feedCard" data-page="Nala Pepper" style="margin-bottom:16px">
     <h2>Feeding</h2>
@@ -1321,10 +1323,20 @@ function setPage(dog) {
     if (el.classList.contains("cond")) { if (!onPage) el.style.display = "none"; }
     else el.style.display = onPage ? "" : "none";
   });
-  // feeding: beside the weight plot on a health page, full-width on the plan page
+  // Medications sit beside Feeding (Nala) or Eating (Pepper).
   const feed = document.getElementById("feedCard"), row = document.getElementById("weightRow");
-  if (dog === cfg.dog) { row.after(feed); feed.style.marginBottom = "16px"; }
-  else { row.appendChild(feed); feed.style.marginBottom = "0"; }
+  const med = document.getElementById("medCard"), eat = document.getElementById("eatingCard");
+  const pair = document.getElementById("medPair"), gi = document.getElementById("giCard");
+  gi.before(eat);                       // return eating to its own slot first
+  if (dog === cfg.dog) {                // Nala: [Feeding | Medications] below the weight row
+    pair.append(feed, med);
+    row.after(pair);
+  } else {                              // Pepper: [Eating | Medications]; feeding stays by weight
+    pair.append(eat, med);
+    gi.before(pair);
+    row.appendChild(feed);
+  }
+  feed.style.marginBottom = "0";
   renderHero(dog);
   renderNotes(dog);
   renderOrigins(dog);
