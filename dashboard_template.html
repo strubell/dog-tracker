@@ -1101,7 +1101,6 @@ function renderMeds(dog) {
   for (let i = 0; i < startPad; i++) html += `<div class="medcell blank"></div>`;
   const seen = new Map();   // category key -> colour
   const recurring = ((DATA.meds || {})[dog] || {}).recurring || [];
-  let dueShown = false;
   for (let day = 1; day <= daysIn; day++) {
     const dt = new Date(y, mo, day), iso = localISO(dt), meds = medsOn(dog, iso);
     // one dot per category present that day; a dot is "skipped" only if every med in it was skipped
@@ -1121,7 +1120,7 @@ function renderMeds(dog) {
     const due = recurring.filter(r => r.next_due === iso);
     for (const r of due) {
       const c = medCat({ name: r.name });
-      seen.set(c.key, c.color); dueShown = true;
+      seen.set(c.key, c.color);
       dots += `<span class="mdot due" style="border-color:${c.color}"></span>`;
     }
     const tipRows = ordered.map(([k, g]) =>
@@ -1138,7 +1137,6 @@ function renderMeds(dog) {
   document.getElementById("medLegend").innerHTML = cats.length
     ? cats.map(([k, col]) => `<span class="sw" style="background:${col};border-radius:50%"></span><span>${esc(k)}</span>`).join("")
       + `<span class="sw skip" style="background:transparent;border:1.5px solid var(--ink-muted);border-radius:50%"></span><span>skipped</span>`
-      + (dueShown ? `<span class="sw" style="background:transparent;border:1.5px solid var(--ink-2);border-radius:50%"></span><span>due</span>` : "")
     : `<span>No medications this month.</span>`;
   // recurring meds: show the projected next dose regardless of which month is on screen
   const upcoming = recurring.filter(r => r.next_due);
