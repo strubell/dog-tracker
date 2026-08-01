@@ -91,11 +91,14 @@
   .logrow input { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
                   border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
   .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
-  .tabs { display: flex; gap: 8px; margin: 18px 0 8px; }
-  .tab { font: inherit; font-size: 15px; font-weight: 700; padding: 8px 20px; border-radius: 999px;
-         border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); cursor: pointer; }
-  .tab:hover { background: var(--band); }
-  .tab.active { color: #fff; border-color: transparent; }
+  /* folder tabs: the active tab merges into the hero card directly below it */
+  .tabs { display: flex; gap: 4px; margin: 20px 0 0; padding-left: 14px; position: relative; z-index: 2; }
+  .tab { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 22px;
+         border: 1px solid var(--border); border-radius: 10px 10px 0 0; margin-bottom: -1px;
+         background: var(--band); color: var(--ink-muted); cursor: pointer; }
+  .tab:hover { color: var(--ink-2); }
+  .tab.active { background: var(--surface); color: var(--ink); border-bottom-color: var(--surface);
+                border-top: 2px solid var(--tabc, var(--series)); padding-top: 7px; }
   #mealLog, #giLog { display: none; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 14px; }
   #mealLog.on, #giLog.on { display: flex; }
   #mealLog .mgrp, #giLog .mgrp { display: flex; gap: 6px; align-items: center; }
@@ -166,7 +169,7 @@
   ul.notes .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
   .hero { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap;
           background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-          padding: 20px; margin: 10px 0 16px; }
+          padding: 20px; margin: 0 0 16px; }
   .heropic { width: 150px; height: 150px; border-radius: 14px; object-fit: cover; flex: none;
              border: 1px solid var(--border); }
   .heroinfo { flex: 1; min-width: 280px; }
@@ -1383,7 +1386,7 @@ function setPage(dog) {
   document.querySelectorAll("#tabs .tab").forEach(t => {
     const on = t.dataset.dog === dog;
     t.classList.toggle("active", on);
-    t.style.background = on ? dogColor(dog) : "";
+    t.style.setProperty("--tabc", dogColor(t.dataset.dog));
   });
 }
 
