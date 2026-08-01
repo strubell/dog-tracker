@@ -93,11 +93,9 @@
   .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
   /* folder tabs: the active tab merges into the hero card directly below it */
   .tabs { display: flex; gap: 4px; margin: 20px 0 0; position: relative; z-index: 2; }
-  /* the frontmost tab shares the folder's left edge for a clean vertical line */
-  .tab:first-child { border-top-left-radius: 0; }
-  .tab { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 22px;
-         border: 1px solid var(--border); border-radius: 10px 10px 0 0; margin-bottom: -1px;
-         background: var(--band); color: var(--ink-muted); cursor: pointer; }
+  .tab { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 22px; min-width: 100px;
+         text-align: center; border: 1px solid var(--border); border-radius: 10px 10px 0 0;
+         margin-bottom: -1px; background: var(--band); color: var(--ink-muted); cursor: pointer; }
   .tab:hover { color: var(--ink-2); }
   .tab.active { background: var(--surface); color: var(--ink); border-bottom-color: var(--surface);
                 border-top: 2px solid var(--tabc, var(--series)); padding-top: 7px; }
