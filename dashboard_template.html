@@ -449,7 +449,8 @@ const thisMonday = mondayOf(today);
 const planWeek = Math.floor((today - planStart) / WEEK) + 1;
 // length of the structured plan = last bounded phase's end week (derived from
 // config, so adding/repeating a week just works)
-const planWeeks = Math.max(...cfg.phases.filter(p => p.weeks[1] != null).map(p => p.weeks[1]));
+const planWeeks = cfg.plan_weeks
+  || Math.max(...cfg.phases.filter(p => p.weeks[1] != null).map(p => p.weeks[1]));
 const planDays = planWeeks * 7;
 const iso = d => d.toISOString().slice(0, 10);
 const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
