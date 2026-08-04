@@ -340,8 +340,9 @@
     </div>
     <div class="card">
       <h2 id="planHeading">The plan</h2>
-      <div class="sub">Advance only after a no-joint-signs week; repeat the week otherwise</div>
+      <div class="sub">Distance-led, easy pace. Advance only when she's eager and sign-free — repeat a week otherwise</div>
       <ol class="phases" id="phases"></ol>
+      <div class="sub planfoot" id="planFoot" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -415,9 +416,13 @@ const DATA = /*__DATA__*/null;
 const cfg = DATA.config;
 const dogColor = name =>
   (cfg.dog_colors || {})[name] || (name === cfg.dog ? "var(--series)" : "var(--series-2)");
-// weekly-mileage goal per dog, or null if that dog has no goal
-const weeklyGoalFor = dog => dog === cfg.dog ? (cfg.weekly_miles_target || null)
-  : ((cfg.other_dog_miles_target || {})[dog] || null);
+// weekly-mileage goal per dog, or null if that dog has no goal. For the primary
+// dog this ramps with the plan: the current phase's weekly_mi, else the flat target.
+const weeklyGoalFor = dog => {
+  if (dog !== cfg.dog) return (cfg.other_dog_miles_target || {})[dog] || null;
+  const ph = phaseFor(planWeek);
+  return (ph && ph.weekly_mi) || cfg.weekly_miles_target || null;
+};
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 const DAY = 86400000, WEEK = 7 * DAY;
@@ -516,7 +521,10 @@ const weekStats = nalaAgg.weekStats;
   const cur = weekStats(thisMonday), prev = weekStats(addDays(thisMonday, -7));
   const daysSoFar = Math.min(7, Math.floor((today - thisMonday) / DAY) + 1);
   const ph = phaseFor(planWeek);
-  const target = ph ? (ph.daily_min ? `${ph.daily_min[0]}–${ph.daily_min[1]} min/day` : "varies by day — see the weekly template") : "—";
+  const target = ph && ph.daily_min ? `${ph.daily_min[0]}–${ph.daily_min[1]} min/day` : "varies by day";
+  const miTarget = ph
+    ? (ph.daily_mi ? `phase target ${ph.daily_mi[0]}–${ph.daily_mi[1]} mi/day` : "varies by day — see the plan")
+    : "";
   const wl = DATA.weight.filter(e => !e.dog || e.dog === cfg.dog)
     .sort((a, b) => a.date < b.date ? -1 : 1);
   const w = wl[wl.length - 1] ?? { lb: cfg.weight_start_lb, date: cfg.plan_start + " (est.)" };
@@ -535,7 +543,8 @@ const weekStats = nalaAgg.weekStats;
       <div class="meta">phase target ${target}</div></div>
     <div class="tile"><div class="label">Miles this week</div>
       <div class="value">${cur.mi.toFixed(1)}<small> mi · </small>${avgMi.toFixed(1)}<small>/day</small></div>
-      <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDeltaTxt}</div></div>
+      <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDeltaTxt}</div>
+      ${miTarget ? `<div class="meta">${miTarget}</div>` : ""}</div>
     <div class="tile"><div class="label">Weight</div>
       <div class="value">${w.lb.toFixed(1)}<small> lb</small></div>
       ${dw !== 0 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
@@ -745,7 +754,7 @@ function renderWeekly(dog) {
       const fill = rec ? rampFor(rec.min) : null;
       let attrs = "";
       if (!future) {
-        const tgt = w > 0 && ph && ph.daily_min ? ` · target ${ph.daily_min[0]}–${ph.daily_min[1]} min` : "";
+        const tgt = w > 0 && ph && ph.daily_mi ? ` · target ${ph.daily_mi[0]}–${ph.daily_mi[1]} mi` : "";
         const t = rec
           ? `<b>${fmtDay(d)}</b>${rec.min} min · ${rec.mi.toFixed(1)} mi${tgt}<br>${esc(rec.names.join(", "))}`
           : `<b>${fmtDay(d)}</b>${unanswered ? "circle not recorded yet — sync will ask" : "no outing logged"}${tgt}`;
@@ -875,10 +884,21 @@ document.getElementById("phases").innerHTML = cfg.phases.map(p => {
   const done = p.weeks[1] != null && planWeek > p.weeks[1];
   const now = phaseFor(planWeek) === p;
   const range = p.weeks[1] == null ? `Week ${p.weeks[0]}+` : `Weeks ${p.weeks[0]}–${p.weeks[1]}`;
+  const daily = p.daily_mi
+    ? `${p.daily_mi[0]}–${p.daily_mi[1]} mi/day${p.daily_min ? ` (${p.daily_min[0]}–${p.daily_min[1]} min)` : ""} · `
+    : "";
+  const weekly = p.weekly_mi ? `~${p.weekly_mi[0]}–${p.weekly_mi[1]} mi/week · ` : "";
   return `<li class="${now ? "now" : done ? "done" : ""}">` +
          `<div class="ph-t">${range} — ${esc(p.title)}</div>` +
-         `<div class="ph-n">${p.daily_min ? `${p.daily_min[0]}–${p.daily_min[1]} min daily · ` : ""}${esc(p.notes)}</div></li>`;
+         `<div class="ph-n">${daily}${weekly}${esc(p.notes)}</div></li>`;
 }).join("");
+// plan footnote: ceiling + guardrails + current status
+if (cfg.plan_meta) {
+  const m = cfg.plan_meta;
+  document.getElementById("planFoot").innerHTML =
+    (m.status ? `<div><b>Where she is now:</b> ${esc(m.status)}</div>` : "") +
+    (m.guardrails ? `<div style="margin-top:6px">${esc(m.guardrails)}</div>` : "");
+}
 
 // ---- recent outings (per active dog; table under This week's progress) ------------
 function renderRecent(dog) {
