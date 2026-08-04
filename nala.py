@@ -478,8 +478,18 @@ def _away_days(cfg):
 
 
 def _circle_answer(answers, k, dog):
-    """That dog's answer for day k, or None if unanswered."""
+    """That dog's answer for day k, or None if unanswered.
+    Stored as a bool (single circle) or an int count of circles."""
     return (answers.get(k) or {}).get(dog)
+
+
+def _circle_count(a):
+    """Number of circles an answer represents: None/False -> 0, True -> 1, int -> itself."""
+    if a is None or a is False:
+        return 0
+    if a is True:
+        return 1
+    return int(a)
 
 
 def circle_days(cfg, db, dog):
@@ -494,9 +504,13 @@ def circle_days(cfg, db, dog):
     while d <= today:
         k = d.isoformat()
         a = _circle_answer(answers, k, dog)
-        if (a if k >= cfg["plan_start"]
-                else k not in walked and k not in away and (a if a is not None else True)):
-            out.append(k)
+        if k >= cfg["plan_start"]:
+            n = _circle_count(a)                       # 0 if unanswered
+        elif k not in walked and k not in away:
+            n = _circle_count(a) if a is not None else 1   # pre-plan default: 1
+        else:
+            n = 0
+        out.extend([k] * n)                            # one entry per circle that day
         d += timedelta(days=1)
     return out
 
@@ -538,14 +552,14 @@ def cmd_circle(args):
     answers = load(CIRCLES, {})
     k = _date_arg(args)
     entry = answers.setdefault(k, {})
-    val = args.value == "yes"
-    if args.dog:
-        entry[args.dog] = val
-    else:
-        for d in dog_names(cfg):
-            entry[d] = val
+    # count of circles: "no" -> 0; "yes" -> --count (default 1). Store 1/0 as
+    # bool for tidiness (matches existing data), 2+ as an int.
+    n = 0 if args.value == "no" else (args.count if args.count is not None else 1)
+    val = True if n == 1 else (False if n == 0 else n)
+    for d in ([args.dog] if args.dog else dog_names(cfg)):
+        entry[d] = val
     save(CIRCLES, answers)
-    print(f"Circle on {k} · {args.dog or 'both dogs'}: {args.value}")
+    print(f"Circle on {k} · {args.dog or 'both dogs'}: {n} circle(s)")
     cmd_build(args)
 
 
@@ -1250,6 +1264,7 @@ def main():
     s = sub.add_parser("circle", help="record whether the baseline circle walk happened")
     s.add_argument("value", choices=["yes", "no"])
     s.add_argument("--dog", help="one dog (default: set all dogs)")
+    s.add_argument("--count", type=int, help="number of circles that day (default 1 for yes)")
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
     s.set_defaults(func=cmd_circle)
 
