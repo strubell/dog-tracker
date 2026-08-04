@@ -340,9 +340,9 @@
     </div>
     <div class="card">
       <h2 id="planHeading">The plan</h2>
-      <div class="sub">Distance is the primary metric, minutes a backup — keep the pace easy and sniffy even at target</div>
+      <div class="sub">Distance is the primary metric, minutes a backup — keep the pace easy and sniffy even at target
+        <span id="planGuard" style="display:block; margin-top:6px"></span></div>
       <ol class="phases" id="phases"></ol>
-      <div class="sub planfoot" id="planFoot" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -893,13 +893,9 @@ document.getElementById("phases").innerHTML = cfg.phases.map(p => {
          `<div class="ph-t">${range} — ${esc(p.title)}</div>` +
          `<div class="ph-n">${daily}${weekly}${esc(p.notes)}</div></li>`;
 }).join("");
-// plan footnote: current status + guardrails (distance/pace line lives in the subtitle)
-if (cfg.plan_meta) {
-  const m = cfg.plan_meta;
-  document.getElementById("planFoot").innerHTML =
-    (m.status ? `<div><b>Where she is now:</b> ${esc(m.status)}</div>` : "") +
-    (m.guardrails ? `<div style="margin-top:6px">${esc(m.guardrails)}</div>` : "");
-}
+// guardrails sit at the top, under the distance-primary subtitle
+if (cfg.plan_meta && cfg.plan_meta.guardrails)
+  document.getElementById("planGuard").textContent = cfg.plan_meta.guardrails;
 
 // ---- recent outings (per active dog; table under This week's progress) ------------
 function renderRecent(dog) {
