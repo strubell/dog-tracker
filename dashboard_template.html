@@ -172,6 +172,7 @@
               letter-spacing: .03em; margin-bottom: 2px; }
   .treats-h .d { text-transform: none; font-weight: 400; letter-spacing: 0; }
   .treats ul.notes .d { margin-right: 0; }
+  .treat-ing { font-size: 12px; color: var(--ink-muted); margin-top: 2px; line-height: 1.4; }
   .hero { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap;
           background: var(--surface); border: 1px solid var(--border);
           border-radius: 0 14px 14px 14px; padding: 20px; margin: 0 0 16px; }
@@ -930,8 +931,11 @@ function renderFeeding(dog) {
   }).join("");
   // treats: tracked for reference (ingredients etc.), not counted in kcal/day
   const treats = (cfg.treats || {})[dog] || [];
-  const treatRows = treats.map(t =>
-    `<li>${esc(t.item)}${t.ingredients ? ` <span class="d">— ${esc(t.ingredients)}</span>` : ""}</li>`).join("");
+  const treatRows = treats.map(t => {
+    const kc = t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : "";
+    const ing = t.ingredients ? `<div class="treat-ing">${esc(t.ingredients)}</div>` : "";
+    return `<li>${esc(t.item)}${kc}${ing}</li>`;
+  }).join("");
   const treatBlock = treats.length
     ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div>` +
       `<ul class="notes">${treatRows}</ul></div>`
