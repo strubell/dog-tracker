@@ -103,6 +103,12 @@
   #mealLog.on, #giLog.on, #foodLog.on { display: flex; }
   #mealLog .mgrp, #giLog .mgrp, #foodLog .mgrp { display: flex; gap: 6px; align-items: center; }
   #mealLog .mgrp .lbl, #giLog .mgrp .lbl, #foodLog .mgrp .lbl { color: var(--ink-2); font-weight: 600; }
+  #foodLog > .lbl { color: var(--ink-2); font-weight: 600; }
+  .eatchip { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+             border: 1px solid var(--eat-2); background: var(--eat-2); color: var(--ink); }
+  .eatchip::before { content: "✓ "; }
+  .eatchip.off { background: var(--surface); border-color: var(--border); color: var(--ink-muted); text-decoration: line-through; }
+  .eatchip.off::before { content: "✗ "; }
   .food-sec { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
   .food-sec-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
                 color: var(--ink-2); margin-bottom: 8px; }
@@ -1024,11 +1030,15 @@ function renderFood(dog) {
   legend += `<span class="sw" style="background:var(--eat-0)"></span><span>skipped</span>`;
   if (logItems.some(it => !it.assume)) legend += `<span class="sw" style="background:var(--surface)"></span><span>not logged</span>`;
   legend += `<span style="margin-left:8px">◆ different/new food</span>`;
+  // logging: everything defaults to "yes"; each chip is on (eaten/given) unless
+  // that item was explicitly skipped — click a chip to toggle today's value.
+  const todayRec = meals[localISO(today)] || {};
   const controls = (DATA.live && window.logMeal)
-    ? `<div id="foodLog" class="on">` + logItems.map(it =>
-        `<span class="mgrp"><span class="lbl">${esc(it.label)}</span>` +
-        `<button class="btn yes" data-key="${it.key}" data-val="1">ate</button>` +
-        `<button class="btn no" data-key="${it.key}" data-val="0">skip</button></span>`).join("") +
+    ? `<div id="foodLog" class="on"><span class="lbl">Today:</span>` +
+      logItems.map(it => {
+        const skipped = todayRec[it.key] === false;
+        return `<button class="eatchip${skipped ? " off" : ""}" data-key="${it.key}" data-skipped="${skipped}">${esc(it.label)}</button>`;
+      }).join("") +
       `<span class="mgrp"><input id="foodOther" placeholder="different/new food…" style="width:150px"><button class="btn" id="foodOtherBtn">Log</button></span></div>`
     : "";
   const eatContent = total
@@ -1061,8 +1071,9 @@ function renderFood(dog) {
   eatBody.innerHTML = eatContent;
   bindTips(eatBody);
   if (DATA.live && window.logMeal) {
-    eatBody.querySelectorAll("#foodLog button[data-key]").forEach(b =>
-      b.onclick = () => window.logMeal(dog, { [b.dataset.key]: b.dataset.val === "1" }));
+    eatBody.querySelectorAll(".eatchip").forEach(b =>
+      // was skipped → set back to yes (true); was on → mark skipped (false)
+      b.onclick = () => window.logMeal(dog, { [b.dataset.key]: b.dataset.skipped === "true" }));
     const ob = eatBody.querySelector("#foodOtherBtn");
     if (ob) ob.onclick = () => { const v = eatBody.querySelector("#foodOther").value.trim(); if (v) window.logMeal(dog, { other: v }); };
   }
