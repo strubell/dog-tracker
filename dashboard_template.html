@@ -1018,16 +1018,17 @@ function renderFood(dog) {
     }
   }
   svg += `</svg>`;
-  let legend = total === 1
-    ? `<span>${esc(logItems[0].label)}:</span><span class="sw" style="background:var(--eat-2)"></span><span>given</span><span class="sw" style="background:var(--eat-0)"></span><span>skipped</span>`
-    : `<span>meals eaten:</span>` + Array.from({ length: total + 1 }, (_, n) => `<span class="sw" style="background:${eatColor(total ? n / total : null)}"></span><span>${n}</span>`).join("");
+  // one standardized legend for every dog: complete / (partial) / missed / not logged
+  let legend = `<span class="sw" style="background:var(--eat-2)"></span><span>all eaten</span>`;
+  if (total > 1) legend += `<span class="sw" style="background:var(--eat-1)"></span><span>partial</span>`;
+  legend += `<span class="sw" style="background:var(--eat-0)"></span><span>skipped</span>`;
   if (logItems.some(it => !it.assume)) legend += `<span class="sw" style="background:var(--surface)"></span><span>not logged</span>`;
   legend += `<span style="margin-left:8px">◆ different/new food</span>`;
   const controls = (DATA.live && window.logMeal)
     ? `<div id="foodLog" class="on">` + logItems.map(it =>
         `<span class="mgrp"><span class="lbl">${esc(it.label)}</span>` +
-        `<button class="btn yes" data-key="${it.key}" data-val="1">${it.assume ? "given" : "ate"}</button>` +
-        `<button class="btn no" data-key="${it.key}" data-val="0">${it.assume ? "skipped" : "skip"}</button></span>`).join("") +
+        `<button class="btn yes" data-key="${it.key}" data-val="1">ate</button>` +
+        `<button class="btn no" data-key="${it.key}" data-val="0">skip</button></span>`).join("") +
       `<span class="mgrp"><input id="foodOther" placeholder="different/new food…" style="width:150px"><button class="btn" id="foodOtherBtn">Log</button></span></div>`
     : "";
   const eatContent = total
