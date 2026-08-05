@@ -172,7 +172,12 @@
               letter-spacing: .03em; margin-bottom: 2px; }
   .treats-h .d { text-transform: none; font-weight: 400; letter-spacing: 0; }
   .treats ul.notes .d { margin-right: 0; }
-  .ing-line { font-size: 12px; color: var(--ink-muted); margin-top: 2px; line-height: 1.4; }
+  .ingsum { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
+  .ingsum-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+              color: var(--ink-2); margin-bottom: 6px; }
+  .ingsum-h .d { text-transform: none; font-weight: 400; letter-spacing: 0; }
+  .ingsum-row { font-size: 13px; line-height: 1.55; }
+  .ingsum-cat { color: var(--ink-muted); }
   .hero { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap;
           background: var(--surface); border: 1px solid var(--border);
           border-radius: 0 14px 14px 14px; padding: 20px; margin: 0 0 16px; }
@@ -916,6 +921,44 @@ function renderRecent(dog) {
 }
 
 // ---- feeding (active dog only) ----------------------------------------------------
+// ---- ingredient summary ------------------------------------------------------
+// Full ingredient lists live in config; for display we surface only the
+// allergy/health-relevant components (proteins, grains/starches, a few to watch)
+// and drop the vitamin/mineral/amino-acid/preservative/probiotic/additive tail.
+const ING_CATS = [
+  { cat: "Proteins", kws: ["salmon","fish","herring","trout","cod","whitefish","lamb","chicken","beef","turkey","duck","pork","egg","whey","milk","cheese","yogurt","liver","venison","bison","rabbit","quail","pheasant"] },
+  { cat: "Grains & starches", kws: ["barley","sorghum","millet","rice","wheat","corn","oatmeal","oat","sweet potato","potato","quinoa","peas","pea","lentil","chickpea","garbanzo","tapioca","buckwheat","rye"] },
+  { cat: "Other to watch", kws: ["garlic","brewers yeast","yeast","soy"] },
+];
+const ING_LABEL = { whey: "Whey (dairy)", milk: "Dairy", cheese: "Dairy", yogurt: "Dairy",
+  "sweet potato": "Sweet potato", "brewers yeast": "Yeast", pea: "Peas", peas: "Peas",
+  garbanzo: "Chickpea", oatmeal: "Oats", oat: "Oats" };
+function classifyIngredient(tokenLc, words) {
+  for (const { cat, kws } of ING_CATS)
+    for (const kw of [...kws].sort((a, b) => b.length - a.length)) {   // longest kw first
+      const hit = kw.includes(" ")
+        ? tokenLc.includes(kw)
+        : words.some(w => w === kw || w === kw + "s" || w === kw + "es" || (kw.length >= 5 && w.startsWith(kw)));
+      if (hit) return { cat, label: ING_LABEL[kw] || kw.charAt(0).toUpperCase() + kw.slice(1) };
+    }
+  return null;
+}
+function summarizeIngredients(strings) {
+  const groups = new Map();
+  for (const s of strings) {
+    if (!s) continue;
+    for (const tok of s.split(",")) {
+      const t = tok.trim().replace(/\.$/, "").toLowerCase();
+      if (!t) continue;
+      const c = classifyIngredient(t, t.split(/[^a-z]+/).filter(Boolean));
+      if (!c) continue;
+      if (!groups.has(c.cat)) groups.set(c.cat, []);
+      if (!groups.get(c.cat).includes(c.label)) groups.get(c.cat).push(c.label);
+    }
+  }
+  return ING_CATS.map(({ cat }) => [cat, groups.get(cat) || []]).filter(([, a]) => a.length);
+}
+
 function renderFeeding(dog) {
   const card = document.getElementById("feedCard");
   const items = (cfg.feeding || {})[dog];
@@ -927,25 +970,30 @@ function renderFeeding(dog) {
     const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
     const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup`
               : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
-    const ing = it.ingredients ? `<div class="ing-line">${esc(it.ingredients)}</div>` : "";
-    return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span>${ing}</li>`;
+    return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span></li>`;
   }).join("");
-  // treats: tracked for reference (ingredients etc.), not counted in kcal/day
+  // treats: tracked for reference, not counted in kcal/day
   const treats = (cfg.treats || {})[dog] || [];
   const treatRows = treats.map(t => {
     const kc = t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : "";
-    const ing = t.ingredients ? `<div class="ing-line">${esc(t.ingredients)}</div>` : "";
-    return `<li>${esc(t.item)}${kc}${ing}</li>`;
+    return `<li>${esc(t.item)}${kc}</li>`;
   }).join("");
   const treatBlock = treats.length
     ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div>` +
       `<ul class="notes">${treatRows}</ul></div>`
     : "";
+  // key-ingredient roll-up across food + treats
+  const summ = summarizeIngredients([...items, ...treats].map(x => x.ingredients));
+  const summBlock = summ.length
+    ? `<div class="ingsum"><div class="ingsum-h">Key ingredients <span class="d">(allergy / health-relevant)</span></div>` +
+      summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") +
+      `</div>`
+    : "";
   document.getElementById("feeding").innerHTML =
     `<div style="flex:1"><div style="margin-bottom:6px">` +
     `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
     `<span class="sub">${Math.round(kcal)} kcal/day</span></div>` +
-    `<ul class="notes">${rows}</ul>${treatBlock}</div>`;
+    `<ul class="notes">${rows}</ul>${treatBlock}${summBlock}</div>`;
 }
 
 // ---- profile hero (photo + vitals + vaccinations + flags + breed mix) -------------
