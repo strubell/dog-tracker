@@ -350,10 +350,19 @@
   </div>
 
   <div class="duo" style="margin-bottom:16px">
-    <div class="card" id="foodCard" data-page="Nala Pepper">
-      <h2>Feeding &amp; eating</h2>
-      <div id="foodBody"></div>
+    <div class="card" id="feedingCard" data-page="Nala Pepper">
+      <h2>Feeding</h2>
+      <div class="sub">Current diet</div>
+      <div id="feedBody"></div>
     </div>
+    <div class="card" id="eatingCard" data-page="Nala Pepper">
+      <h2>Eating</h2>
+      <div class="sub">Daily log</div>
+      <div id="eatBody"></div>
+    </div>
+  </div>
+
+  <div class="duo" style="margin-bottom:16px">
     <div class="card" id="medCard" data-page="Nala Pepper">
       <h2>Medications</h2>
       <div class="sub">Daily meds auto-fill each day; tap a day to log a skipped dose or an extra med</div>
@@ -367,6 +376,15 @@
       <div class="mednext" id="medDue"></div>
       <div class="mededitor hide" id="medEditor"></div>
     </div>
+    <div class="card" data-page="Nala Pepper">
+      <h2>Weight history</h2>
+      <div class="sub">All known weigh-ins</div>
+      <div class="legend" id="weightLegend"></div>
+      <div class="scroll" id="weightHist"></div>
+      <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
+      <div class="logrow"><input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
+        <button class="btn" id="wBtn">Log weight</button></div>
+    </div>
   </div>
 
   <div class="card" id="giCard" data-page="Nala Pepper">
@@ -376,16 +394,6 @@
     <div class="legend" id="giLegend"></div>
     <div id="giLog"></div>
     <details class="tv"><summary>Log entries</summary><div id="giTable"></div></details>
-  </div>
-
-  <div class="card" data-page="Nala Pepper">
-    <h2>Weight history</h2>
-    <div class="sub">All known weigh-ins</div>
-    <div class="legend" id="weightLegend"></div>
-    <div class="scroll" id="weightHist"></div>
-    <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
-    <div class="logrow"><input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
-      <button class="btn" id="wBtn">Log weight</button></div>
   </div>
 
 
@@ -1022,9 +1030,9 @@ function renderFood(dog) {
         `<button class="btn no" data-key="${it.key}" data-val="0">${it.assume ? "skipped" : "skip"}</button></span>`).join("") +
       `<span class="mgrp"><input id="foodOther" placeholder="different/new food…" style="width:150px"><button class="btn" id="foodOtherBtn">Log</button></span></div>`
     : "";
-  const logBlock = total
-    ? `<div class="food-sec"><div class="food-sec-h">Daily log</div><div class="scroll">${svg}</div><div class="legend">${legend}</div>${controls}</div>`
-    : "";
+  const eatContent = total
+    ? `<div class="scroll">${svg}</div><div class="legend">${legend}</div>${controls}`
+    : `<div class="sub">Nothing to log.</div>`;
 
   // ----- diet history (from plan start; changes logged via `nala.py diet`) -----
   const feedByName = {}; feed.forEach(it => feedByName[it.item] = it);
@@ -1045,14 +1053,17 @@ function renderFood(dog) {
       summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") + `</div>`
     : "";
 
-  const body = document.getElementById("foodBody");
-  body.innerHTML = rationBlock + logBlock + dietBlock + summBlock;
-  bindTips(body);
+  // left panel = the diet (ration + treats + key ingredients + diet history)
+  document.getElementById("feedBody").innerHTML = rationBlock + summBlock + dietBlock;
+  // right panel = the daily eating log
+  const eatBody = document.getElementById("eatBody");
+  eatBody.innerHTML = eatContent;
+  bindTips(eatBody);
   if (DATA.live && window.logMeal) {
-    body.querySelectorAll("#foodLog button[data-key]").forEach(b =>
+    eatBody.querySelectorAll("#foodLog button[data-key]").forEach(b =>
       b.onclick = () => window.logMeal(dog, { [b.dataset.key]: b.dataset.val === "1" }));
-    const ob = body.querySelector("#foodOtherBtn");
-    if (ob) ob.onclick = () => { const v = body.querySelector("#foodOther").value.trim(); if (v) window.logMeal(dog, { other: v }); };
+    const ob = eatBody.querySelector("#foodOtherBtn");
+    if (ob) ob.onclick = () => { const v = eatBody.querySelector("#foodOther").value.trim(); if (v) window.logMeal(dog, { other: v }); };
   }
 }
 
