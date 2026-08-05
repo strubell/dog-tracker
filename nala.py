@@ -566,16 +566,16 @@ def cmd_circle(args):
 
 # ---------------------------------------------------------------- meals
 
-def log_meal(dog, d, breakfast=None, dinner=None, other=None):
-    """Record a dog's meals for a day. breakfast/dinner: True (ate), False
-    (skipped), or None (leave unchanged). other: description of any different/
-    new food (empty string clears it, None leaves unchanged)."""
+def log_meal(dog, d, items=None, other=None):
+    """Record a dog's daily-log items for a day. items: {key: True (ate/given),
+    False (skipped), or None (leave unchanged)} — keys are per-dog daily_log
+    items (e.g. breakfast/dinner for Pepper, dental for Nala). other: any
+    different/new food (empty string clears it, None leaves unchanged)."""
     store = load(MEALS, {})
     day = store.setdefault(dog, {}).setdefault(d, {})
-    if breakfast is not None:
-        day["breakfast"] = breakfast
-    if dinner is not None:
-        day["dinner"] = dinner
+    for k, v in (items or {}).items():
+        if v is not None:
+            day[k] = bool(v)
     if other is not None:
         o = other.strip()
         if o:
@@ -589,10 +589,18 @@ def log_meal(dog, d, breakfast=None, dinner=None, other=None):
 def cmd_meal(args):
     dog = args.dog or config()["dog"]
     yn = {"yes": True, "no": False}
-    day = log_meal(dog, _date_arg(args), yn.get(args.breakfast),
-                   yn.get(args.dinner), args.other)
-    ate = sum(1 for m in ("breakfast", "dinner") if day.get(m))
-    print(f"{dog} on {_date_arg(args)}: {ate} meal(s) eaten"
+    items = {}
+    if args.breakfast:
+        items["breakfast"] = yn[args.breakfast]
+    if args.dinner:
+        items["dinner"] = yn[args.dinner]
+    if args.ate:
+        items[args.ate] = True         # any daily_log item (e.g. dental)
+    if args.skip:
+        items[args.skip] = False
+    day = log_meal(dog, _date_arg(args), items, args.other)
+    logged = ", ".join(f"{k}={'y' if v else 'n'}" for k, v in items.items())
+    print(f"{dog} on {_date_arg(args)}: {logged or 'no change'}"
           + (f" · other: {day['other']}" if day.get("other") else ""))
     cmd_build(args)
 
@@ -1201,8 +1209,9 @@ def cmd_serve(args):
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/meal":
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
-                    log_meal(body["dog"], d, body.get("breakfast"),
-                             body.get("dinner"), body.get("other"))
+                    items = {k: v for k, v in body.items()
+                             if k not in ("dog", "date", "other")}
+                    log_meal(body["dog"], d, items, body.get("other"))
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/gi":
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
@@ -1292,8 +1301,10 @@ def main():
 
     s = sub.add_parser("meal", help="log a dog's meals for a day")
     s.add_argument("--dog", help="which dog (default the primary one)")
-    s.add_argument("--breakfast", choices=["yes", "no"], help="ate breakfast?")
-    s.add_argument("--dinner", choices=["yes", "no"], help="ate dinner?")
+    s.add_argument("--breakfast", choices=["yes", "no"], help="ate breakfast? (Pepper)")
+    s.add_argument("--dinner", choices=["yes", "no"], help="ate dinner? (Pepper)")
+    s.add_argument("--ate", metavar="ITEM", help="mark a daily_log item given/eaten (e.g. dental)")
+    s.add_argument("--skip", metavar="ITEM", help="mark a daily_log item skipped/not given (e.g. dental)")
     s.add_argument("--other", help="any different/new food eaten (blank clears)")
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
     s.set_defaults(func=cmd_meal)

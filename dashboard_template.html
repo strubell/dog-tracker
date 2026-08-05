@@ -99,10 +99,13 @@
   .tab:hover { color: var(--ink-2); }
   .tab.active { background: var(--surface); color: var(--ink); border-bottom-color: var(--surface);
                 border-top: 2px solid var(--tabc, var(--series)); padding-top: 7px; }
-  #mealLog, #giLog { display: none; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 14px; }
-  #mealLog.on, #giLog.on { display: flex; }
-  #mealLog .mgrp, #giLog .mgrp { display: flex; gap: 6px; align-items: center; }
-  #mealLog .mgrp .lbl, #giLog .mgrp .lbl { color: var(--ink-2); font-weight: 600; }
+  #mealLog, #giLog, #foodLog { display: none; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 14px; }
+  #mealLog.on, #giLog.on, #foodLog.on { display: flex; }
+  #mealLog .mgrp, #giLog .mgrp, #foodLog .mgrp { display: flex; gap: 6px; align-items: center; }
+  #mealLog .mgrp .lbl, #giLog .mgrp .lbl, #foodLog .mgrp .lbl { color: var(--ink-2); font-weight: 600; }
+  .food-sec { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
+  .food-sec-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+                color: var(--ink-2); margin-bottom: 8px; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
            background: var(--ink); color: var(--page); padding: 9px 16px; border-radius: 8px;
            font-size: 14px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
@@ -324,7 +327,7 @@
     <details class="tv"><summary id="recentSummary">Recent outings</summary><div id="recentTable"></div></details>
   </div>
 
-  <div class="card" data-page="Nala Pepper">
+  <div class="card" id="weeklyCard" data-page="Nala Pepper">
     <h2 id="weeklyTitle">Weekly miles</h2>
     <div class="sub">Logged outings, including daily “circle”</div>
     <div class="scroll" id="weeklyChart"></div>
@@ -332,13 +335,9 @@
     <details class="tv"><summary>Table view</summary><div id="weeklyTable"></div></details>
   </div>
 
-  <div class="card" id="eatingCard" data-page="Pepper">
-    <h2>Eating</h2>
-    <div class="sub">Meals eaten each day, plus anything new.</div>
-    <div class="scroll" id="eatmap"></div>
-    <div class="legend" id="eatLegend"></div>
-    <div id="mealLog"></div>
-    <details class="tv"><summary>Table view</summary><div id="eatTable"></div></details>
+  <div class="card" id="foodCard" data-page="Nala Pepper">
+    <h2>Feeding &amp; eating</h2>
+    <div id="foodBody"></div>
   </div>
 
   <div class="card" id="giCard" data-page="Pepper">
@@ -396,14 +395,8 @@
     </div>
   </div>
 
-  <!-- medications pair with feeding (Nala) or eating (Pepper); populated in setPage -->
+  <!-- the unified "Feeding & eating" card pairs with Medications; populated in setPage -->
   <div class="duo" id="medPair" style="margin-bottom:16px"></div>
-
-  <div class="card" id="feedCard" data-page="Nala Pepper" style="margin-bottom:16px">
-    <h2>Feeding</h2>
-    <div class="sub">Current daily ration</div>
-    <div id="feeding" style="display:flex; gap:28px; flex-wrap:wrap"></div>
-  </div>
 
 
   <div class="card cond" id="notesCard" data-page="Nala Pepper" style="display:none">
@@ -968,58 +961,121 @@ function summarizeIngredients(strings) {
   return ING_CATS.map(({ cat }) => [cat, groups.get(cat) || []]).filter(([, a]) => a.length);
 }
 
-function renderFeeding(dog) {
-  const card = document.getElementById("feedCard");
-  const items = (cfg.feeding || {})[dog];
-  if (!items || !items.length) { card.style.display = "none"; return; }
-  if (card.dataset.onpage !== "0") card.style.display = "";
+// ---- unified feeding & eating (both dogs): ration + daily log + diet history + key ingredients
+const eatColor = f => f === null ? "var(--surface)" : f >= 1 ? "var(--eat-2)" : f <= 0 ? "var(--eat-0)" : "var(--eat-1)";
+function renderFood(dog) {
+  const feed = (cfg.feeding || {})[dog] || [];
+  const treats = (cfg.treats || {})[dog] || [];
+  const logItems = (cfg.daily_log || {})[dog] || [];
+  const meals = mealsFor(dog);
   const frac = c => ({ "0.25": "¼", "0.33": "⅓", "0.50": "½", "0.67": "⅔", "0.75": "¾" })[c.toFixed(2)] || c;
-  const kcal = items.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
-  const rows = items.map(it => {
+
+  // ----- current ration + treats -----
+  const kcal = feed.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
+  const rows = feed.map(it => {
     const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
-    const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup`
-              : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
+    const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup` : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
     return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span></li>`;
   }).join("");
-  // treats: tracked for reference, not counted in kcal/day
-  const treats = (cfg.treats || {})[dog] || [];
-  const treatRows = treats.map(t => {
-    const kc = t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : "";
-    return `<li>${esc(t.item)}${kc}</li>`;
-  }).join("");
+  const treatRows = treats.map(t =>
+    `<li>${esc(t.item)}${t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : ""}</li>`).join("");
   const treatBlock = treats.length
-    ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div>` +
-      `<ul class="notes">${treatRows}</ul></div>`
+    ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div><ul class="notes">${treatRows}</ul></div>` : "";
+  const rationBlock =
+    `<div style="margin-bottom:6px"><span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
+    `<span class="sub">${Math.round(kcal)} kcal/day</span></div><ul class="notes">${rows}</ul>${treatBlock}`;
+
+  // ----- daily log calendar (per-dog items; unlogged "assume" items count as done) -----
+  const total = logItems.length;
+  const dayStatus = rec => {
+    if (!total) return { frac: null, parts: [] };
+    let happened = 0, known = false; const parts = [];
+    for (const it of logItems) {
+      const v = rec ? rec[it.key] : undefined;
+      let st = v === true ? "yes" : v === false ? "no" : it.assume ? "def" : "none";
+      if (st !== "none") known = true;
+      if (st === "yes" || st === "def") happened++;
+      parts.push({ it, st });
+    }
+    return { frac: known ? happened / total : null, happened, parts };
+  };
+  const lastDataWk = Object.keys(meals).reduce((mx, k) =>
+    Math.max(mx, Math.floor((new Date(k + "T00:00:00") - planStart) / WEEK) + 1), 1);
+  const endWeek = Math.max(planWeek, lastDataWk, 1);
+  const cell = 26, gap = 2, top = 22, left = 44;
+  const Wd = left + 7 * (cell + gap) + 10, Hd = top + endWeek * (cell + gap) + 6;
+  let svg = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="${esc(dog)} daily eating log">`;
+  "MTWTFSS".split("").forEach((c, i) => svg += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
+  for (let w = 1; w <= endWeek; w++) {
+    const mon = addDays(planStart, (w - 1) * 7), yr = top + (w - 1) * (cell + gap);
+    svg += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}">${fmtDay(mon)}</text>`;
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(mon, i), k = localISO(d), x = left + i * (cell + gap);
+      const future = d > today, rec = meals[k], st = dayStatus(rec);
+      const fill = future ? "var(--surface)" : eatColor(st.frac);
+      let attrs = "";
+      if (!future) {
+        let t = st.frac === null ? `<b>${fmtDay(d)}</b>not logged`
+          : `<b>${fmtDay(d)}</b>` + st.parts.map(p => {
+              const ok = p.st === "yes" || p.st === "def";
+              const kc = (!ok && p.it.kcal) ? ` (−${p.it.kcal} kcal)` : "";
+              return `${esc(p.it.label)}: ${ok ? "✓" : "✗ skipped" + kc}`;
+            }).join(" · ");
+        if (rec && rec.other) t += `<br>◆ ${esc(rec.other)}`;
+        attrs = ` data-tip="${esc(t)}"`;
+      }
+      svg += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4" fill="${fill}"` +
+             ` stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}" stroke-width="${+d === +today ? 1.5 : 1}"` +
+             (future ? ' opacity="0.35"' : "") + attrs + `/>`;
+      if (rec && rec.other && !future)
+        svg += `<path d="M ${x + cell - 8} ${yr + 2} l 6 0 l 0 6 z" fill="var(--ink)" pointer-events="none"/>`;
+    }
+  }
+  svg += `</svg>`;
+  let legend = total === 1
+    ? `<span>${esc(logItems[0].label)}:</span><span class="sw" style="background:var(--eat-2)"></span><span>given</span><span class="sw" style="background:var(--eat-0)"></span><span>skipped</span>`
+    : `<span>meals eaten:</span>` + Array.from({ length: total + 1 }, (_, n) => `<span class="sw" style="background:${eatColor(total ? n / total : null)}"></span><span>${n}</span>`).join("");
+  if (logItems.some(it => !it.assume)) legend += `<span class="sw" style="background:var(--surface)"></span><span>not logged</span>`;
+  legend += `<span style="margin-left:8px">◆ different/new food</span>`;
+  const controls = (DATA.live && window.logMeal)
+    ? `<div id="foodLog" class="on">` + logItems.map(it =>
+        `<span class="mgrp"><span class="lbl">${esc(it.label)}</span>` +
+        `<button class="btn yes" data-key="${it.key}" data-val="1">${it.assume ? "given" : "ate"}</button>` +
+        `<button class="btn no" data-key="${it.key}" data-val="0">${it.assume ? "skipped" : "skip"}</button></span>`).join("") +
+      `<span class="mgrp"><input id="foodOther" placeholder="different/new food…" style="width:150px"><button class="btn" id="foodOtherBtn">Log</button></span></div>`
     : "";
-  // key-ingredient roll-up across food + treats
-  const summ = summarizeIngredients([...items, ...treats].map(x => x.ingredients));
-  const summBlock = summ.length
-    ? `<div class="ingsum"><div class="ingsum-h">Key ingredients <span class="d">(allergy / health-relevant)</span></div>` +
-      summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") +
-      `</div>`
+  const logBlock = total
+    ? `<div class="food-sec"><div class="food-sec-h">Daily log</div><div class="scroll">${svg}</div><div class="legend">${legend}</div>${controls}</div>`
     : "";
-  // diet history: dated food changes, newest first, linked to calories + key
-  // ingredients (current foods resolve their ingredients/kcal from the ration above)
-  const feedByName = {}; items.forEach(it => feedByName[it.item] = it);
+
+  // ----- diet history (from plan start; changes logged via `nala.py diet`) -----
+  const feedByName = {}; feed.forEach(it => feedByName[it.item] = it);
   const diet = ((DATA.diet || {})[dog] || []).slice().reverse();
   const dietRows = diet.map(e => {
-    const fi = feedByName[e.food];
-    const ing = e.ingredients || (fi && fi.ingredients);
-    const kc = e.kcal_per_cup || (fi && fi.kcal_per_cup);
+    const fi = feedByName[e.food], kc = e.kcal_per_cup || (fi && fi.kcal_per_cup);
     const range = !e.end ? `since ${e.start || "?"}` : !e.start ? `until ${e.end}` : `${e.start} – ${e.end}`;
-    const keyIng = ing ? summarizeIngredients([ing]).map(([c, l]) => `${c}: ${l.join(", ")}`).join(" · ") : "";
     return `<div class="diet-item"><div class="diet-h"><b>${esc(e.food)}</b> ` +
       `<span class="d">${esc(range)}${kc ? ` · ${kc} kcal/cup` : ""}${!e.end ? " · current" : ""}</span></div>` +
-      `${e.reason ? `<div class="diet-r">${esc(e.reason)}</div>` : ""}` +
-      `${keyIng ? `<div class="diet-ing">${esc(keyIng)}</div>` : ""}</div>`;
+      `${e.reason ? `<div class="diet-r">${esc(e.reason)}</div>` : ""}</div>`;
   }).join("");
-  const dietBlock = diet.length
-    ? `<div class="diethist"><div class="diethist-h">Diet history</div>${dietRows}</div>` : "";
-  document.getElementById("feeding").innerHTML =
-    `<div style="flex:1"><div style="margin-bottom:6px">` +
-    `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
-    `<span class="sub">${Math.round(kcal)} kcal/day</span></div>` +
-    `<ul class="notes">${rows}</ul>${treatBlock}${summBlock}${dietBlock}</div>`;
+  const dietBlock = diet.length ? `<div class="food-sec"><div class="food-sec-h">Diet history</div>${dietRows}</div>` : "";
+
+  // ----- key ingredients (filtered; full lists live in config) -----
+  const summ = summarizeIngredients([...feed, ...treats].map(x => x.ingredients));
+  const summBlock = summ.length
+    ? `<div class="food-sec"><div class="food-sec-h">Key ingredients <span class="d" style="text-transform:none;font-weight:400;letter-spacing:0">(allergy / health-relevant)</span></div>` +
+      summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") + `</div>`
+    : "";
+
+  const body = document.getElementById("foodBody");
+  body.innerHTML = rationBlock + logBlock + dietBlock + summBlock;
+  bindTips(body);
+  if (DATA.live && window.logMeal) {
+    body.querySelectorAll("#foodLog button[data-key]").forEach(b =>
+      b.onclick = () => window.logMeal(dog, { [b.dataset.key]: b.dataset.val === "1" }));
+    const ob = body.querySelector("#foodOtherBtn");
+    if (ob) ob.onclick = () => { const v = body.querySelector("#foodOther").value.trim(); if (v) window.logMeal(dog, { other: v }); };
+  }
 }
 
 // ---- profile hero (photo + vitals + vaccinations + flags + breed mix) -------------
@@ -1283,63 +1339,8 @@ function renderNotes(dog) {
 
 // ---- Pepper: eating ---------------------------------------------------------------
 // meals: { dog: { "YYYY-MM-DD": { breakfast: bool, dinner: bool, other: str } } }
-const EAT_COLORS = ["var(--eat-0)", "var(--eat-1)", "var(--eat-2)"];   // 0, 1, 2 meals eaten
 function mealsFor(dog) { return (DATA.meals || {})[dog] || {}; }
-function mealCount(rec) {
-  if (!rec || (rec.breakfast === undefined && rec.dinner === undefined)) return null;
-  return (rec.breakfast ? 1 : 0) + (rec.dinner ? 1 : 0);
-}
 
-function renderEating(dog) {
-  const meals = mealsFor(dog);
-  const lastDataWk = Object.keys(meals).reduce((mx, k) => {
-    const w = Math.floor((new Date(k + "T00:00:00") - planStart) / WEEK) + 1;
-    return Math.max(mx, w);
-  }, 1);
-  const endWeek = Math.max(planWeek, lastDataWk, 1);
-  const cell = 26, gap = 2, top = 22, left = 44;
-  const Wd = left + 7 * (cell + gap) + 10, Hd = top + endWeek * (cell + gap) + 6;
-  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="Meals eaten per day">`;
-  "MTWTFSS".split("").forEach((c, i) =>
-    s += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
-  for (let w = 1; w <= endWeek; w++) {
-    const mon = addDays(planStart, (w - 1) * 7), yr = top + (w - 1) * (cell + gap);
-    s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}">${fmtDay(mon)}</text>`;
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(mon, i), k = localISO(d), x = left + i * (cell + gap);
-      const future = d > today, rec = meals[k], n = mealCount(rec);
-      const fill = n === null ? "var(--surface)" : EAT_COLORS[n];
-      let attrs = "";
-      if (!future) {
-        const t = n === null
-          ? `<b>${fmtDay(d)}</b>not logged`
-          : `<b>${fmtDay(d)}</b>${n} of 2 meals · B: ${rec.breakfast ? "ate" : "skipped"}, D: ${rec.dinner ? "ate" : "skipped"}`
-            + (rec.other ? `<br>◆ ${esc(rec.other)}` : "");
-        attrs = ` data-tip="${esc(t)}"`;
-      }
-      s += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4" fill="${fill}"` +
-           ` stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}" stroke-width="${+d === +today ? 1.5 : 1}"` +
-           (future ? ' opacity="0.35"' : "") + attrs + `/>`;
-      if (rec && rec.other && !future)
-        s += `<path d="M ${x + cell - 8} ${yr + 2} l 6 0 l 0 6 z" fill="var(--ink)" pointer-events="none"/>`;
-    }
-  }
-  s += `</svg>`;
-  const el = document.getElementById("eatmap"); el.innerHTML = s; bindTips(el);
-  document.getElementById("eatLegend").innerHTML =
-    `<span>meals eaten:</span>` +
-    [0, 1, 2].map(n => `<span class="sw" style="background:${EAT_COLORS[n]}"></span><span>${n}</span>`).join("") +
-    `<span class="sw" style="background:var(--surface)"></span><span>not logged</span>` +
-    `<span style="margin-left:8px">◆ different/new food</span>`;
-  const days = Object.keys(meals).sort().reverse().slice(0, 21);
-  document.getElementById("eatTable").innerHTML = days.length
-    ? `<table><tr><th>Date</th><th>Breakfast</th><th>Dinner</th><th>Other</th></tr>` +
-      days.map(k => { const r = meals[k]; return `<tr><td>${k}</td>` +
-        `<td>${r.breakfast === undefined ? "—" : r.breakfast ? "ate" : "skipped"}</td>` +
-        `<td>${r.dinner === undefined ? "—" : r.dinner ? "ate" : "skipped"}</td>` +
-        `<td>${esc(r.other || "")}</td></tr>`; }).join("") + `</table>`
-    : `<div class="sub">No meals logged yet.</div>`;
-}
 
 // ---- Pepper: diarrhea calendar (GitHub-contributions style, multi-year) ----------
 // color = severity (mild/moderate/severe), chronic low-grade faint, parasite
@@ -1464,27 +1465,18 @@ function setPage(dog) {
     if (el.classList.contains("cond")) { if (!onPage) el.style.display = "none"; }
     else el.style.display = onPage ? "" : "none";
   });
-  // Medications sit beside Feeding (Nala) or Eating (Pepper).
-  const feed = document.getElementById("feedCard"), row = document.getElementById("weightRow");
-  const med = document.getElementById("medCard"), eat = document.getElementById("eatingCard");
-  const pair = document.getElementById("medPair"), gi = document.getElementById("giCard");
-  gi.before(eat);                       // return eating to its own slot first
-  if (dog === cfg.dog) {                // Nala: [Feeding | Medications] below the weight row
-    pair.append(feed, med);
-    row.after(pair);
-  } else {                              // Pepper: [Eating | Medications]; feeding stays by weight
-    pair.append(eat, med);
-    gi.before(pair);
-    row.appendChild(feed);
-  }
-  feed.style.marginBottom = "0";
+  // [Feeding & eating | Medications] pair sits right below the Weekly-miles card;
+  // Pepper's diarrhea card and Nala's activity/plan duo fall naturally after it.
+  const pair = document.getElementById("medPair");
+  document.getElementById("weeklyCard").after(pair);
+  pair.append(document.getElementById("foodCard"), document.getElementById("medCard"));
   renderHero(dog);
   renderNotes(dog);
   renderOrigins(dog);
   renderVet(dog);
   renderMeds(dog);
   renderDiarrhea(dog);
-  renderFeeding(dog);
+  renderFood(dog);
   renderCumulative(dog);
   renderRecent(dog);
   renderWeekly(dog);
@@ -1504,7 +1496,7 @@ document.getElementById("medPrev").onclick = () => { medMonth.setMonth(medMonth.
 document.getElementById("medNext").onclick = () => { medMonth.setMonth(medMonth.getMonth() + 1); renderMeds(activeDog); };
 
 // render Pepper's panels for every non-primary dog (only Pepper for now)
-for (const d of dogList.filter(x => x !== cfg.dog)) { renderEating(d); renderPepperKpis(d); }
+for (const d of dogList.filter(x => x !== cfg.dog)) { renderPepperKpis(d); }
 
 // ---- live mode (served by `nala.py serve`) ----------------------------------------
 // click any origin photo (or the hero photo) to view it full-size in a lightbox
@@ -1658,31 +1650,17 @@ if (DATA.live) {
     catch (e) { flash("Failed: " + e.message, 4000); }
   };
 
-  // meal logging (Pepper's eating card)
   const petDog = dogList.find(d => d !== cfg.dog);
-  const mealLog = document.getElementById("mealLog");
-  if (petDog && mealLog) {
-    mealLog.classList.add("on");
-    mealLog.innerHTML =
-      ["breakfast", "dinner"].map(m =>
-        `<span class="mgrp"><span class="lbl">${m[0].toUpperCase() + m.slice(1)}</span>` +
-        `<button class="btn yes" data-meal="${m}" data-val="1">ate</button>` +
-        `<button class="btn no" data-meal="${m}" data-val="0">skip</button></span>`).join("") +
-      `<span class="mgrp"><input id="otherIn" placeholder="different/new food…" style="width:160px">` +
-      `<button class="btn" id="otherBtn">Log</button></span>`;
-    const reload = () => setTimeout(() => location.reload(), 700);
-    mealLog.querySelectorAll("button[data-meal]").forEach(b => b.onclick = async () => {
-      try { await post("/api/meal", { dog: petDog, [b.dataset.meal]: b.dataset.val === "1" });
-            flash(`${petDog} ${b.dataset.meal} → ${b.dataset.val === "1" ? "ate" : "skipped"} — reloading…`); reload(); }
-      catch (e) { flash("Failed: " + e.message, 4000); }
-    });
-    document.getElementById("otherBtn").onclick = async () => {
-      const v = document.getElementById("otherIn").value.trim();
-      if (!v) return flash("Type what she ate first");
-      try { await post("/api/meal", { dog: petDog, other: v }); flash("Logged — reloading…"); reload(); }
-      catch (e) { flash("Failed: " + e.message, 4000); }
-    };
-  }
+
+  // daily eating-log entry — the unified card's controls (built per dog in
+  // renderFood) call this; patch = {itemKey: bool} or {other: text}
+  window.logMeal = async (dog, patch) => {
+    try {
+      await post("/api/meal", { dog, ...patch });
+      flash(`${dog}: logged — reloading…`);
+      setTimeout(() => location.reload(), 700);
+    } catch (e) { flash("Failed: " + e.message, 4000); }
+  };
 
   // diarrhea incident logging (Pepper's diarrhea card)
   const giLog = document.getElementById("giLog");
