@@ -167,6 +167,11 @@
   ul.notes { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   ul.notes li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
   ul.notes .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  .treats { margin-top: 14px; }
+  .treats-h { font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
+              letter-spacing: .03em; margin-bottom: 2px; }
+  .treats-h .d { text-transform: none; font-weight: 400; letter-spacing: 0; }
+  .treats ul.notes .d { margin-right: 0; }
   .hero { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap;
           background: var(--surface); border: 1px solid var(--border);
           border-radius: 0 14px 14px 14px; padding: 20px; margin: 0 0 16px; }
@@ -923,11 +928,19 @@ function renderFeeding(dog) {
               : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
     return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span></li>`;
   }).join("");
+  // treats: tracked for reference (ingredients etc.), not counted in kcal/day
+  const treats = (cfg.treats || {})[dog] || [];
+  const treatRows = treats.map(t =>
+    `<li>${esc(t.item)}${t.ingredients ? ` <span class="d">— ${esc(t.ingredients)}</span>` : ""}</li>`).join("");
+  const treatBlock = treats.length
+    ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div>` +
+      `<ul class="notes">${treatRows}</ul></div>`
+    : "";
   document.getElementById("feeding").innerHTML =
     `<div style="flex:1"><div style="margin-bottom:6px">` +
     `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
     `<span class="sub">${Math.round(kcal)} kcal/day</span></div>` +
-    `<ul class="notes">${rows}</ul></div>`;
+    `<ul class="notes">${rows}</ul>${treatBlock}</div>`;
 }
 
 // ---- profile hero (photo + vitals + vaccinations + flags + breed mix) -------------
