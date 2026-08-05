@@ -317,8 +317,7 @@
     <div id="reviewList"></div>
   </div>
 
-  <div class="kpis" id="kpis" data-page="Nala"></div>
-  <div class="kpis" id="kpisPepper" data-page="Pepper"></div>
+  <div class="kpis" id="kpis" data-page="Nala Pepper"></div>
 
   <div class="card" data-page="Nala Pepper">
     <h2>This week's progress</h2>
@@ -335,12 +334,41 @@
     <details class="tv"><summary>Table view</summary><div id="weeklyTable"></div></details>
   </div>
 
-  <div class="card" id="foodCard" data-page="Nala Pepper">
-    <h2>Feeding &amp; eating</h2>
-    <div id="foodBody"></div>
+  <div class="card" id="activityCard" data-page="Nala Pepper">
+    <h2>Daily activity</h2>
+    <div class="sub">Minutes out each day, circles included</div>
+    <div class="scroll" id="heatmap"></div>
+    <div class="legend" id="heatLegend"></div>
+    <details class="tv"><summary>Table view</summary><div id="heatTable"></div></details>
   </div>
 
-  <div class="card" id="giCard" data-page="Pepper">
+  <div class="card" id="planCard" data-page="Nala">
+    <h2 id="planHeading">The plan</h2>
+    <div class="sub">Distance is the primary metric, minutes a backup — keep the pace easy and sniffy even at target. <span id="planGuard"></span></div>
+    <ol class="phases" id="phases"></ol>
+  </div>
+
+  <div class="duo" style="margin-bottom:16px">
+    <div class="card" id="foodCard" data-page="Nala Pepper">
+      <h2>Feeding &amp; eating</h2>
+      <div id="foodBody"></div>
+    </div>
+    <div class="card" id="medCard" data-page="Nala Pepper">
+      <h2>Medications</h2>
+      <div class="sub">Daily meds auto-fill each day; tap a day to log a skipped dose or an extra med</div>
+      <div class="medhead">
+        <button class="btn" id="medPrev">‹</button>
+        <span class="mlabel" id="medLabel"></span>
+        <button class="btn" id="medNext">›</button>
+      </div>
+      <div class="scroll"><div class="medgrid" id="medGrid"></div></div>
+      <div class="legend" id="medLegend"></div>
+      <div class="mednext" id="medDue"></div>
+      <div class="mededitor hide" id="medEditor"></div>
+    </div>
+  </div>
+
+  <div class="card" id="giCard" data-page="Nala Pepper">
     <h2>Diarrhea</h2>
     <div class="sub" id="giSub">Every recorded episode, by day</div>
     <div class="scroll" id="gimap"></div>
@@ -349,54 +377,15 @@
     <details class="tv"><summary>Log entries</summary><div id="giTable"></div></details>
   </div>
 
-  <div class="duo" data-page="Nala" style="margin-bottom:16px">
-    <div class="card">
-      <h2>Daily activity</h2>
-      <div class="sub">Minutes out with her each day, circles included</div>
-      <div class="scroll" id="heatmap"></div>
-      <div class="legend" id="heatLegend"></div>
-      <details class="tv"><summary>Table view</summary><div id="heatTable"></div></details>
-    </div>
-    <div class="card">
-      <h2 id="planHeading">The plan</h2>
-      <div class="sub">Distance is the primary metric, minutes a backup — keep the pace easy and sniffy even at target. <span id="planGuard"></span></div>
-      <ol class="phases" id="phases"></ol>
-    </div>
+  <div class="card" data-page="Nala Pepper">
+    <h2>Weight history</h2>
+    <div class="sub">All known weigh-ins</div>
+    <div class="legend" id="weightLegend"></div>
+    <div class="scroll" id="weightHist"></div>
+    <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
+    <div class="logrow"><input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
+      <button class="btn" id="wBtn">Log weight</button></div>
   </div>
-
-  <div class="card" id="medCard" data-page="Nala Pepper">
-    <h2>Medications</h2>
-    <div class="sub">Daily meds auto-fill each day; tap a day to log a skipped dose or an extra med</div>
-    <div class="medhead">
-      <button class="btn" id="medPrev">‹</button>
-      <span class="mlabel" id="medLabel"></span>
-      <button class="btn" id="medNext">›</button>
-    </div>
-    <div class="scroll"><div class="medgrid" id="medGrid"></div></div>
-    <div class="legend" id="medLegend"></div>
-    <div class="mednext" id="medDue"></div>
-    <div class="mededitor hide" id="medEditor"></div>
-  </div>
-
-  <div class="duo" id="weightRow" style="margin-bottom:16px">
-    <div class="card" data-page="Nala Pepper">
-      <h2>Weight history</h2>
-      <div class="sub">All known weigh-ins</div>
-      <div class="legend" id="weightLegend"></div>
-      <div class="scroll" id="weightHist"></div>
-      <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
-      <div class="logrow"><input id="wIn" type="number" step="0.1" placeholder="weight lb" style="width:100px">
-        <button class="btn" id="wBtn">Log weight</button></div>
-    </div>
-    <div class="card" data-page="Nala">
-      <h2>Plan progress</h2>
-      <div class="sub" id="weightSub"></div>
-      <div class="scroll" id="weightChart"></div>
-    </div>
-  </div>
-
-  <!-- the unified "Feeding & eating" card pairs with Medications; populated in setPage -->
-  <div class="duo" id="medPair" style="margin-bottom:16px"></div>
 
 
   <div class="card cond" id="notesCard" data-page="Nala Pepper" style="display:none">
@@ -529,39 +518,38 @@ const weekStats = nalaAgg.weekStats;
   }
 }
 
-// ---- KPI tiles -------------------------------------------------------------
-{
-  const cur = weekStats(thisMonday), prev = weekStats(addDays(thisMonday, -7));
+// ---- KPI tiles (identical 4 tiles for every dog) ---------------------------
+function renderKpis(dog) {
+  const isPrimary = dog === cfg.dog;
+  const agg = aggFor(dog);
+  const cur = agg.weekStats(thisMonday), prev = agg.weekStats(addDays(thisMonday, -7));
   const daysSoFar = Math.min(7, Math.floor((today - thisMonday) / DAY) + 1);
-  const ph = phaseFor(planWeek);
-  const target = ph && ph.daily_min ? `${ph.daily_min[0]}–${ph.daily_min[1]} min/day` : "varies by day";
-  const miTarget = ph
-    ? (ph.daily_mi ? `phase target ${ph.daily_mi[0]}–${ph.daily_mi[1]} mi/day` : "varies by day — see the plan")
-    : "";
-  const wl = DATA.weight.filter(e => !e.dog || e.dog === cfg.dog)
-    .sort((a, b) => a.date < b.date ? -1 : 1);
-  const w = wl[wl.length - 1] ?? { lb: cfg.weight_start_lb, date: cfg.plan_start + " (est.)" };
-  const dw = w.lb - cfg.weight_start_lb;
-  const [lo, hi] = cfg.weight_target_lb;
+  const avgMin = daysSoFar ? Math.round(cur.min / daysSoFar) : 0;
+  const avgMi = daysSoFar ? cur.mi / daysSoFar : 0;
   const miDelta = cur.mi - prev.mi;
   const miDeltaTxt = miDelta === 0 ? "same as last week"
     : `${miDelta > 0 ? "▲" : "▼"} ${Math.abs(miDelta).toFixed(1)} vs last week`;
-  const avgMin = daysSoFar ? Math.round(cur.min / daysSoFar) : 0;
-  const avgMi = daysSoFar ? cur.mi / daysSoFar : 0;
+  // miles target only for the dog on the reconditioning plan
+  const ph = isPrimary ? phaseFor(planWeek) : null;
+  const miTarget = ph && ph.daily_mi ? `phase target ${ph.daily_mi[0]}–${ph.daily_mi[1]} mi/day` : "";
+  // weight: latest weigh-in, delta vs the previous one, and the dog's target band
+  const wl = DATA.weight.filter(e => (e.dog || cfg.dog) === dog).sort((a, b) => a.date < b.date ? -1 : 1);
+  const w = wl[wl.length - 1], prevW = wl[wl.length - 2];
+  const dw = w && prevW ? w.lb - prevW.lb : null;
+  const target = isPrimary ? cfg.weight_target_lb : (cfg.other_dog_targets_lb || {})[dog];
   document.getElementById("kpis").innerHTML = `
     <div class="tile"><div class="label">Days active</div>
       <div class="value">${cur.days}<small> of 7</small></div></div>
     <div class="tile"><div class="label">Time out this week</div>
-      <div class="value">${fmtTime(cur.min)}<small> · </small>${avgMin}<small> min/day</small></div>
-      <div class="meta">phase target ${target}</div></div>
+      <div class="value">${fmtTime(cur.min)}<small> · </small>${avgMin}<small> min/day</small></div></div>
     <div class="tile"><div class="label">Miles this week</div>
       <div class="value">${cur.mi.toFixed(1)}<small> mi · </small>${avgMi.toFixed(1)}<small>/day</small></div>
       <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDeltaTxt}</div>
       ${miTarget ? `<div class="meta">${miTarget}</div>` : ""}</div>
     <div class="tile"><div class="label">Weight</div>
-      <div class="value">${w.lb.toFixed(1)}<small> lb</small></div>
-      ${dw !== 0 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
-      <div class="meta">target ${lo}–${hi} lb</div></div>`;
+      <div class="value">${w ? w.lb.toFixed(1) : "—"}<small> lb</small></div>
+      ${dw !== null && Math.abs(dw) >= 0.05 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
+      ${target ? `<div class="meta">target ${target[0]}–${target[1]} lb</div>` : ""}</div>`;
 }
 
 // ---- tooltip plumbing -------------------------------------------------------
@@ -732,14 +720,16 @@ function renderWeekly(dog) {
     `</table>`;
 }
 
-// ---- daily-floor heatmap ------------------------------------------------------
-{
+// ---- daily activity heatmap (per dog) -----------------------------------------
+function renderHeatmap(dog) {
+  const isPrimary = dog === cfg.dog;
+  const bd = aggFor(dog).byDay;
   const preWeeks = 4;
   const endWeek = Math.max(planWeeks, Math.min(planWeek, planWeeks + 4));
   const rows = [];
   for (let w = -preWeeks + 1; w <= endWeek; w++)
     if (w !== 0) rows.push(w);          // w<=0 pre-plan, w>=1 plan weeks
-  const circUnans = new Set(DATA.circles_unanswered);
+  const circUnans = new Set((DATA.circles_unansweredByDog || {})[dog] || []);
   const cell = 26, gap = 2, top = 22, left = 44;
   const Wd = left + 7 * (cell + gap) + 90, Hd = top + rows.length * (cell + gap) + 6;
   const steps = [0, 15, 25, 35, 45, 60];
@@ -749,25 +739,25 @@ function renderWeekly(dog) {
     while (i < steps.length && min >= steps[i]) i++;
     return `var(--ramp-${i})`;
   };
-  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="Daily minutes with ${cfg.dog}">`;
+  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="Daily minutes with ${esc(dog)}">`;
   "MTWTFSS".split("").forEach((c, i) =>
     s += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
   rows.forEach((w, r) => {
     const mon = addDays(planStart, (w > 0 ? w - 1 : w) * 7);
     const yr = top + r * (cell + gap);
-    const label = w > 0 ? `W${w}` : fmtDay(mon);
+    const label = (w > 0 && isPrimary) ? `W${w}` : fmtDay(mon);   // plan-week labels only for the plan dog
     s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}" ${w === planWeek ? 'font-weight="600"' : ""}>${label}</text>`;
-    const ph = phaseFor(Math.max(w, 1));
+    const ph = isPrimary ? phaseFor(Math.max(w, 1)) : null;
     for (let i = 0; i < 7; i++) {
       const d = addDays(mon, i);
-      const k = localISO(d), rec = byDay[k];
+      const k = localISO(d), rec = bd[k];
       const x = left + i * (cell + gap);
       const future = d > today;
       const unanswered = circUnans.has(k);
       const fill = rec ? rampFor(rec.min) : null;
       let attrs = "";
       if (!future) {
-        const tgt = w > 0 && ph && ph.daily_mi ? ` · target ${ph.daily_mi[0]}–${ph.daily_mi[1]} mi` : "";
+        const tgt = ph && ph.daily_mi ? ` · target ${ph.daily_mi[0]}–${ph.daily_mi[1]} mi` : "";
         const t = rec
           ? `<b>${fmtDay(d)}</b>${rec.min} min · ${rec.mi.toFixed(1)} mi${tgt}<br>${esc(rec.names.join(", "))}`
           : `<b>${fmtDay(d)}</b>${unanswered ? "circle not recorded yet — sync will ask" : "no outing logged"}${tgt}`;
@@ -781,7 +771,7 @@ function renderWeekly(dog) {
       if (unanswered && !rec && !future)
         s += `<text x="${x + cell / 2}" y="${yr + cell / 2 + 4}" text-anchor="middle" pointer-events="none">?</text>`;
     }
-    if (w === 1) s += `<text x="${left + 7 * (cell + gap) + 8}" y="${yr + cell / 2 + 4}" class="lbl">plan start</text>`;
+    if (w === 1 && isPrimary) s += `<text x="${left + 7 * (cell + gap) + 8}" y="${yr + cell / 2 + 4}" class="lbl">plan start</text>`;
   });
   s += `</svg>`;
   const el = document.getElementById("heatmap");
@@ -789,10 +779,10 @@ function renderWeekly(dog) {
   document.getElementById("heatLegend").innerHTML =
     `<span>minutes:</span><span class="sw" style="background:var(--surface)"></span><span>0</span>` +
     steps.slice(1).map((v, i) => `<span class="sw" style="background:var(--ramp-${i + 1})"></span><span>${v}${i === steps.length - 2 ? "+" : ""}</span>`).join("");
-  const days = Object.keys(byDay).sort().reverse().slice(0, 21);
+  const days = Object.keys(bd).sort().reverse().slice(0, 21);
   document.getElementById("heatTable").innerHTML =
     `<table><tr><th>Date</th><th class="num">Minutes</th><th class="num">Miles</th><th>Outings</th></tr>` +
-    days.map(k => `<tr><td>${k}</td><td class="num">${byDay[k].min}</td><td class="num">${byDay[k].mi.toFixed(1)}</td><td>${esc(byDay[k].names.join(", "))}</td></tr>`).join("") +
+    days.map(k => `<tr><td>${k}</td><td class="num">${bd[k].min}</td><td class="num">${bd[k].mi.toFixed(1)}</td><td>${esc(bd[k].names.join(", "))}</td></tr>`).join("") +
     `</table>`;
 }
 
@@ -845,19 +835,6 @@ function renderWeekly(dog) {
     const el = document.getElementById(elId);
     el.innerHTML = s; bindTips(el);
   }
-
-  // plan window: a week before start through a week past the 2nd milestone.
-  // Milestones: end of the structured plan (planWeeks) and +8 weeks after.
-  const mile1 = planWeeks, mile2 = planWeeks + 8;
-  document.getElementById("weightSub").textContent =
-    `Re-weigh every 2–4 weeks · milestones at week ${mile1} (${fmtDay(addDays(planStart, mile1 * 7))}) and week ${mile2}`;
-  const px0 = +addDays(planStart, -7), px1 = +addDays(planStart, (mile2 + 1) * 7);
-  drawWeight("weightChart", [{ name: cfg.dog, pts: entries.filter(e => T0(e.date) >= px0) }],
-             px0, px1, [
-    { t: +planStart, label: "start" },
-    { t: +addDays(planStart, mile1 * 7), label: `wk ${mile1}`, line: true },
-    { t: +addDays(planStart, mile2 * 7), label: `wk ${mile2}`, line: true },
-  ], [{ lo, hi, left: true, label: `target ${lo}–${hi} lb` }]);
 
   // history window: everything known, padded; year ticks (or months if short)
   let hx0 = Math.min(...all.map(e => T0(e.date)));
@@ -1414,38 +1391,6 @@ function renderDiarrhea(dog) {
     : `<div class="sub">No log entries.</div>`;
 }
 
-function renderPepperKpis(dog) {
-  const meals = mealsFor(dog);
-  const wl = DATA.weight.filter(e => e.dog === dog).sort((a, b) => a.date < b.date ? -1 : 1);
-  const w = wl[wl.length - 1], prev = wl[wl.length - 2];
-  const dw = w && prev ? w.lb - prev.lb : null;
-  let eaten = 0, skipped = 0;
-  for (let i = 0; i < 7; i++) {
-    const rec = meals[localISO(addDays(today, -i))];
-    if (!rec) continue;
-    for (const m of ["breakfast", "dinner"]) {
-      if (rec[m] === true) eaten++; else if (rec[m] === false) skipped++;
-    }
-  }
-  const ws = aggFor(dog).weekStats;
-  const cur = ws(thisMonday), lastWk = ws(addDays(thisMonday, -7));
-  const daysSoFar = Math.min(7, Math.floor((today - thisMonday) / DAY) + 1);
-  const avgMi = daysSoFar ? cur.mi / daysSoFar : 0;
-  const miDelta = cur.mi - lastWk.mi;
-  document.getElementById("kpisPepper").innerHTML = `
-    <div class="tile"><div class="label">Days active</div>
-      <div class="value">${cur.days}<small> of 7</small></div></div>
-    <div class="tile"><div class="label">Skipped meals</div>
-      <div class="value">${skipped}</div>
-      <div class="delta ${skipped ? "bad" : "good"}">${skipped ? "this week" : "none this week"}</div></div>
-    <div class="tile"><div class="label">Miles this week</div>
-      <div class="value">${cur.mi.toFixed(1)}<small> mi · </small>${avgMi.toFixed(1)}<small>/day</small></div>
-      <div class="delta ${miDelta > 0 ? "good" : "plain"}">${miDelta === 0 ? "same as last week" : `${miDelta > 0 ? "▲" : "▼"} ${Math.abs(miDelta).toFixed(1)} vs last week`}</div></div>
-    <div class="tile"><div class="label">Weight</div>
-      <div class="value">${w ? w.lb.toFixed(1) : "—"}<small> lb</small></div>
-      ${dw !== null && dw !== 0 ? `<div class="delta ${dw < 0 ? "good" : "bad"}">${dw < 0 ? "▼" : "▲"} ${Math.abs(dw).toFixed(1)} lb</div>` : ""}
-      ${cfg.other_dog_targets_lb && cfg.other_dog_targets_lb[dog] ? `<div class="meta">target ${cfg.other_dog_targets_lb[dog][0]}–${cfg.other_dog_targets_lb[dog][1]} lb</div>` : ""}</div>`;
-}
 
 // ---- tabs / pages -----------------------------------------------------------------
 let activeDog = cfg.dog;
@@ -1465,18 +1410,15 @@ function setPage(dog) {
     if (el.classList.contains("cond")) { if (!onPage) el.style.display = "none"; }
     else el.style.display = onPage ? "" : "none";
   });
-  // [Feeding & eating | Medications] pair sits right below the Weekly-miles card;
-  // Pepper's diarrhea card and Nala's activity/plan duo fall naturally after it.
-  const pair = document.getElementById("medPair");
-  document.getElementById("weeklyCard").after(pair);
-  pair.append(document.getElementById("foodCard"), document.getElementById("medCard"));
   renderHero(dog);
+  renderKpis(dog);
   renderNotes(dog);
   renderOrigins(dog);
   renderVet(dog);
   renderMeds(dog);
   renderDiarrhea(dog);
   renderFood(dog);
+  renderHeatmap(dog);
   renderCumulative(dog);
   renderRecent(dog);
   renderWeekly(dog);
@@ -1496,7 +1438,6 @@ document.getElementById("medPrev").onclick = () => { medMonth.setMonth(medMonth.
 document.getElementById("medNext").onclick = () => { medMonth.setMonth(medMonth.getMonth() + 1); renderMeds(activeDog); };
 
 // render Pepper's panels for every non-primary dog (only Pepper for now)
-for (const d of dogList.filter(x => x !== cfg.dog)) { renderPepperKpis(d); }
 
 // ---- live mode (served by `nala.py serve`) ----------------------------------------
 // click any origin photo (or the hero photo) to view it full-size in a lightbox
