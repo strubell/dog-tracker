@@ -334,18 +334,19 @@
     <details class="tv"><summary>Table view</summary><div id="weeklyTable"></div></details>
   </div>
 
-  <div class="card" id="activityCard" data-page="Nala Pepper">
-    <h2>Daily activity</h2>
-    <div class="sub">Minutes out each day, circles included</div>
-    <div class="scroll" id="heatmap"></div>
-    <div class="legend" id="heatLegend"></div>
-    <details class="tv"><summary>Table view</summary><div id="heatTable"></div></details>
-  </div>
-
-  <div class="card" id="planCard" data-page="Nala">
-    <h2 id="planHeading">The plan</h2>
-    <div class="sub">Distance is the primary metric, minutes a backup — keep the pace easy and sniffy even at target. <span id="planGuard"></span></div>
-    <ol class="phases" id="phases"></ol>
+  <div class="duo" data-page="Nala" style="margin-bottom:16px">
+    <div class="card" id="activityCard">
+      <h2>Daily activity</h2>
+      <div class="sub">Minutes out each day, circles included</div>
+      <div class="scroll" id="heatmap"></div>
+      <div class="legend" id="heatLegend"></div>
+      <details class="tv"><summary>Table view</summary><div id="heatTable"></div></details>
+    </div>
+    <div class="card" id="planCard">
+      <h2 id="planHeading">The plan</h2>
+      <div class="sub">Distance is the primary metric, minutes a backup — keep the pace easy and sniffy even at target. <span id="planGuard"></span></div>
+      <ol class="phases" id="phases"></ol>
+    </div>
   </div>
 
   <div class="duo" style="margin-bottom:16px">
@@ -1418,7 +1419,7 @@ function setPage(dog) {
   renderMeds(dog);
   renderDiarrhea(dog);
   renderFood(dog);
-  renderHeatmap(dog);
+  if (dog === cfg.dog) renderHeatmap(dog);   // daily-activity panel is part of the plan (primary dog)
   renderCumulative(dog);
   renderRecent(dog);
   renderWeekly(dog);
