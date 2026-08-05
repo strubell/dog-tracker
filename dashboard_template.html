@@ -178,6 +178,15 @@
   .ingsum-h .d { text-transform: none; font-weight: 400; letter-spacing: 0; }
   .ingsum-row { font-size: 13px; line-height: 1.55; }
   .ingsum-cat { color: var(--ink-muted); }
+  .diethist { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
+  .diethist-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+                color: var(--ink-2); margin-bottom: 8px; }
+  .diet-item { padding: 7px 0; border-top: 1px solid var(--grid); }
+  .diet-item:first-of-type { border-top: none; padding-top: 0; }
+  .diet-h { font-size: 13.5px; }
+  .diet-h .d { color: var(--ink-muted); font-weight: 400; }
+  .diet-r { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.45; }
+  .diet-ing { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
   .hero { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap;
           background: var(--surface); border: 1px solid var(--border);
           border-radius: 0 14px 14px 14px; padding: 20px; margin: 0 0 16px; }
@@ -989,11 +998,28 @@ function renderFeeding(dog) {
       summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") +
       `</div>`
     : "";
+  // diet history: dated food changes, newest first, linked to calories + key
+  // ingredients (current foods resolve their ingredients/kcal from the ration above)
+  const feedByName = {}; items.forEach(it => feedByName[it.item] = it);
+  const diet = ((DATA.diet || {})[dog] || []).slice().reverse();
+  const dietRows = diet.map(e => {
+    const fi = feedByName[e.food];
+    const ing = e.ingredients || (fi && fi.ingredients);
+    const kc = e.kcal_per_cup || (fi && fi.kcal_per_cup);
+    const range = !e.end ? `since ${e.start || "?"}` : !e.start ? `until ${e.end}` : `${e.start} – ${e.end}`;
+    const keyIng = ing ? summarizeIngredients([ing]).map(([c, l]) => `${c}: ${l.join(", ")}`).join(" · ") : "";
+    return `<div class="diet-item"><div class="diet-h"><b>${esc(e.food)}</b> ` +
+      `<span class="d">${esc(range)}${kc ? ` · ${kc} kcal/cup` : ""}${!e.end ? " · current" : ""}</span></div>` +
+      `${e.reason ? `<div class="diet-r">${esc(e.reason)}</div>` : ""}` +
+      `${keyIng ? `<div class="diet-ing">${esc(keyIng)}</div>` : ""}</div>`;
+  }).join("");
+  const dietBlock = diet.length
+    ? `<div class="diethist"><div class="diethist-h">Diet history</div>${dietRows}</div>` : "";
   document.getElementById("feeding").innerHTML =
     `<div style="flex:1"><div style="margin-bottom:6px">` +
     `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
     `<span class="sub">${Math.round(kcal)} kcal/day</span></div>` +
-    `<ul class="notes">${rows}</ul>${treatBlock}${summBlock}</div>`;
+    `<ul class="notes">${rows}</ul>${treatBlock}${summBlock}${dietBlock}</div>`;
 }
 
 // ---- profile hero (photo + vitals + vaccinations + flags + breed mix) -------------
