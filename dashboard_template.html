@@ -86,6 +86,11 @@
   .toolbar input, .toolbar select { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
                    border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
   .toolbar .grp { display: flex; gap: 6px; align-items: center; }
+  .seg { display: inline-flex; gap: 0; margin: 2px 0 10px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .segbtn { font: inherit; font-size: 12px; padding: 4px 12px; border: none; background: var(--surface);
+            color: var(--ink-2); cursor: pointer; }
+  .segbtn + .segbtn { border-left: 1px solid var(--border); }
+  .segbtn.on { background: var(--series); color: #fff; }
   .logrow { display: none; gap: 6px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
   .logrow.show { display: flex; }
   .logrow input { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
@@ -384,7 +389,8 @@
     </div>
     <div class="card" data-page="Nala Pepper">
       <h2>Weight history</h2>
-      <div class="sub">All known weigh-ins</div>
+      <div class="sub" id="weightSub">All known weigh-ins</div>
+      <div class="seg" id="weightToggle"></div>
       <div class="legend" id="weightLegend"></div>
       <div class="scroll" id="weightHist"></div>
       <details class="tv"><summary>Table view</summary><div id="weightTable"></div></details>
@@ -864,14 +870,43 @@ function renderHeatmap(dog) {
     for (let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m <= d1; m.setMonth(m.getMonth() + 2))
       hTicks.push({ t: +m, label: m.toLocaleDateString(undefined, { month: "short" }) });
   }
-  // history chart shows only the active dog's weigh-ins + that dog's target
+  // weight card has two switchable views: full history, and the recent/plan window
+  let weightMode = "all";
+  const monthTicks = (x0, x1) => {
+    const t = [];
+    for (let m = new Date(new Date(x0).getFullYear(), new Date(x0).getMonth() + 1, 1); +m <= x1; m.setMonth(m.getMonth() + 1))
+      t.push({ t: +m, label: m.toLocaleDateString(undefined, { month: "short" }) });
+    return t;
+  };
   window.renderWeightHistory = function (dog) {
     const isPrimary = dog === cfg.dog;
     const pts = all.filter(e => (e.dog || cfg.dog) === dog);
     const target = isPrimary ? cfg.weight_target_lb : (cfg.other_dog_targets_lb || {})[dog];
     const bands = target
       ? [{ lo: target[0], hi: target[1], below: true, label: `target ${target[0]}–${target[1]} lb` }] : [];
-    drawWeight("weightHist", [{ name: dog, pts }], hx0, hx1, hTicks, bands);
+    document.getElementById("weightToggle").innerHTML =
+      [["all", "All time"], ["recent", "Recent"]].map(([mo, lbl]) =>
+        `<button class="segbtn${weightMode === mo ? " on" : ""}" data-wmode="${mo}">${lbl}</button>`).join("");
+    if (weightMode === "recent") {
+      const mile1 = planWeeks, mile2 = planWeeks + 8;
+      const rx0 = +addDays(planStart, -7);
+      const rx1 = isPrimary ? +addDays(planStart, (mile2 + 1) * 7) : +addDays(today, 30);
+      const rpts = pts.filter(e => T0(e.date) >= rx0);
+      const ticks = isPrimary ? [
+        { t: +planStart, label: "start" },
+        { t: +addDays(planStart, mile1 * 7), label: `wk ${mile1}`, line: true },
+        { t: +addDays(planStart, mile2 * 7), label: `wk ${mile2}`, line: true },
+      ] : monthTicks(rx0, rx1);
+      drawWeight("weightHist", [{ name: dog, pts: rpts }], rx0, rx1, ticks, bands);
+      document.getElementById("weightSub").textContent = isPrimary
+        ? `Plan window · re-weigh every 2–4 weeks · milestones at wk ${mile1} and ${mile2}`
+        : "Recent weigh-ins";
+    } else {
+      drawWeight("weightHist", [{ name: dog, pts }], hx0, hx1, hTicks, bands);
+      document.getElementById("weightSub").textContent = "All known weigh-ins";
+    }
+    document.getElementById("weightToggle").querySelectorAll("[data-wmode]").forEach(b =>
+      b.onclick = () => { weightMode = b.dataset.wmode; renderWeightHistory(dog); });
     document.getElementById("weightLegend").innerHTML = "";
     document.getElementById("weightTable").innerHTML =
       `<table><tr><th>Date</th><th class="num">lb</th><th>Note</th></tr>` +
