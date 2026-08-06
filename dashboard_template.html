@@ -979,35 +979,40 @@ function renderFood(dog) {
 
   // ----- daily log calendar (per-dog items; unlogged "assume" items count as done) -----
   const total = logItems.length;
-  const dayStatus = rec => {
+  const dayStatus = (rec, iso) => {
     if (!total) return { frac: null, parts: [] };
+    const assumeOk = iso >= cfg.plan_start;   // only default to "yes" from the plan onward
     let happened = 0, known = false; const parts = [];
     for (const it of logItems) {
       const v = rec ? rec[it.key] : undefined;
-      let st = v === true ? "yes" : v === false ? "no" : it.assume ? "def" : "none";
+      let st = v === true ? "yes" : v === false ? "no" : (it.assume && assumeOk) ? "def" : "none";
       if (st !== "none") known = true;
       if (st === "yes" || st === "def") happened++;
       parts.push({ it, st });
     }
     return { frac: known ? happened / total : null, happened, parts };
   };
+  // show a few pre-plan weeks (unlogged) so the plan boundary is visible
+  const preWeeks = 4;
   const lastDataWk = Object.keys(meals).reduce((mx, k) =>
     Math.max(mx, Math.floor((new Date(k + "T00:00:00") - planStart) / WEEK) + 1), 1);
   const endWeek = Math.max(planWeek, lastDataWk, 1);
+  const weekNums = [];
+  for (let w = -preWeeks + 1; w <= endWeek; w++) if (w !== 0) weekNums.push(w);
   const cell = 26, gap = 2, top = 22, left = 44;
-  const Wd = left + 7 * (cell + gap) + 10, Hd = top + endWeek * (cell + gap) + 6;
+  const Wd = left + 7 * (cell + gap) + 10, Hd = top + weekNums.length * (cell + gap) + 6;
   let svg = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="${esc(dog)} daily eating log">`;
   "MTWTFSS".split("").forEach((c, i) => svg += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
-  for (let w = 1; w <= endWeek; w++) {
-    const mon = addDays(planStart, (w - 1) * 7), yr = top + (w - 1) * (cell + gap);
-    svg += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}">${fmtDay(mon)}</text>`;
+  weekNums.forEach((w, r) => {
+    const mon = addDays(planStart, (w > 0 ? w - 1 : w) * 7), yr = top + r * (cell + gap);
+    svg += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === 1 ? "lbl" : ""}" ${w === 1 ? 'font-weight="600"' : ""}>${fmtDay(mon)}</text>`;
     for (let i = 0; i < 7; i++) {
       const d = addDays(mon, i), k = localISO(d), x = left + i * (cell + gap);
-      const future = d > today, rec = meals[k], st = dayStatus(rec);
+      const future = d > today, rec = meals[k], st = dayStatus(rec, k);
       const fill = future ? "var(--surface)" : eatColor(st.frac);
       let attrs = "";
       if (!future) {
-        let t = st.frac === null ? `<b>${fmtDay(d)}</b>not logged`
+        let t = st.frac === null ? `<b>${fmtDay(d)}</b>${k < cfg.plan_start ? "before the plan — unlogged" : "not logged"}`
           : `<b>${fmtDay(d)}</b>` + st.parts.map(p => {
               const ok = p.st === "yes" || p.st === "def";
               const kc = (!ok && p.it.kcal) ? ` (−${p.it.kcal} kcal)` : "";
@@ -1022,7 +1027,7 @@ function renderFood(dog) {
       if (rec && rec.other && !future)
         svg += `<path d="M ${x + cell - 8} ${yr + 2} l 6 0 l 0 6 z" fill="var(--ink)" pointer-events="none"/>`;
     }
-  }
+  });
   svg += `</svg>`;
   // one standardized legend for every dog: complete / (partial) / missed / not logged
   let legend = `<span class="sw" style="background:var(--eat-2)"></span><span>all eaten</span>`;
