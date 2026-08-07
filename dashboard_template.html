@@ -991,7 +991,13 @@ function summarizeIngredients(strings) {
 // ---- unified feeding & eating (both dogs): ration + daily log + diet history + key ingredients
 const eatColor = f => f === null ? "var(--surface)" : f >= 1 ? "var(--eat-2)" : f <= 0 ? "var(--eat-0)" : "var(--eat-1)";
 function renderFood(dog) {
-  const feed = (cfg.feeding || {})[dog] || [];
+  // feeding is a list of dated revisions (each a full ration snapshot with kcal +
+  // ingredients); the current ration is the latest revision in effect today.
+  const revs = (cfg.feeding || {})[dog] || [];
+  const revisions = (revs.length && revs[0] && revs[0].items) ? revs : (revs.length ? [{ from: null, items: revs }] : []);
+  const curRev = revisions.filter(r => !r.from || r.from <= localISO(today)).slice(-1)[0]
+    || revisions[revisions.length - 1] || { items: [] };
+  const feed = curRev.items || [];
   const treats = (cfg.treats || {})[dog] || [];
   const logItems = (cfg.daily_log || {})[dog] || [];
   const meals = mealsFor(dog);
@@ -1085,17 +1091,20 @@ function renderFood(dog) {
     ? `<div class="scroll">${svg}</div><div class="legend">${legend}</div>${controls}`
     : `<div class="sub">Nothing to log.</div>`;
 
-  // ----- diet history (from plan start; changes logged via `nala.py diet`) -----
-  const feedByName = {}; feed.forEach(it => feedByName[it.item] = it);
-  const diet = ((DATA.diet || {})[dog] || []).slice().reverse();
-  const dietRows = diet.map(e => {
-    const fi = feedByName[e.food], kc = e.kcal_per_cup || (fi && fi.kcal_per_cup);
-    const range = !e.end ? `since ${e.start || "?"}` : !e.start ? `until ${e.end}` : `${e.start} – ${e.end}`;
-    return `<div class="diet-item"><div class="diet-h"><b>${esc(e.food)}</b> ` +
-      `<span class="d">${esc(range)}${kc ? ` · ${kc} kcal/cup` : ""}${!e.end ? " · current" : ""}</span></div>` +
-      `${e.reason ? `<div class="diet-r">${esc(e.reason)}</div>` : ""}</div>`;
-  }).join("");
-  const dietBlock = diet.length ? `<div class="food-sec"><div class="food-sec-h">Diet history</div>${dietRows}</div>` : "";
+  // ----- diet & calorie history (derived from the dated feeding revisions) -----
+  const revKcal = its => its.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
+  const mainName = its => { const k = (its || []).find(it => it.cups || it.kcal_per_cup); return k ? k.item : ((its[0] && its[0].item) || ""); };
+  const dietRows = revisions.map((r, i) => {
+    const next = revisions[i + 1], its = r.items || [];
+    const range = !r.from ? "" : next ? `${r.from} – ${next.from}` : `since ${r.from}`;
+    const ing = summarizeIngredients(its.map(x => x.ingredients)).map(([c, l]) => `${c}: ${l.join(", ")}`).join(" · ");
+    return `<div class="diet-item"><div class="diet-h"><b>${Math.round(revKcal(its))} kcal/day</b> ` +
+      `<span class="d">${esc(range)}${!next ? " · current" : ""}</span></div>` +
+      `<div class="diet-r">${esc(mainName(its))}${r.note ? " — " + esc(r.note) : ""}</div>` +
+      `${ing ? `<div class="diet-ing">${esc(ing)}</div>` : ""}</div>`;
+  }).reverse().join("");
+  const dietBlock = revisions.length > 1
+    ? `<div class="food-sec"><div class="food-sec-h">Diet &amp; calorie history</div>${dietRows}</div>` : "";
 
   // ----- key ingredients (filtered; full lists live in config) -----
   const summ = summarizeIngredients([...feed, ...treats].map(x => x.ingredients));

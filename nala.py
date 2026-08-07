@@ -43,7 +43,6 @@ CIRCLES = DATA / "circles.json"
 MEALS = DATA / "meals.json"
 GI_LOG = DATA / "gi_incidents.json"
 MED_LOG = DATA / "med_log.json"
-DIET = DATA / "diet_history.json"
 AUTH = DATA / "strava_auth.json"
 TEMPLATE = BASE / "dashboard_template.html"
 DASHBOARD = BASE / "dashboard.html"
@@ -605,26 +604,6 @@ def cmd_meal(args):
     cmd_build(args)
 
 
-def cmd_diet(args):
-    """Record a diet change: close the current open period and open a new one."""
-    dog = args.dog or config()["dog"]
-    store = load(DIET, {})
-    lst = store.setdefault(dog, [])
-    start = args.start or _date_arg(args)
-    for e in lst:                       # close whatever period is currently open
-        if not e.get("end"):
-            e["end"] = start
-    entry = {"start": start, "end": None, "food": args.food}
-    for k, v in (("amount", args.amount), ("reason", args.reason),
-                 ("kcal_per_cup", args.kcal_per_cup), ("ingredients", args.ingredients)):
-        if v:
-            entry[k] = v
-    lst.append(entry)
-    save(DIET, store)
-    print(f"{dog}: diet changed to {args.food} as of {start}")
-    cmd_build(args)
-
-
 def cmd_gi(args):
     dog = args.dog or config()["dog"]
     log_gi(dog, _date_arg(args), args.severity, args.blood == "yes", args.note)
@@ -1068,7 +1047,6 @@ def build_payload(cfg, db):
         "weight": load(WEIGHT, []),
         "notes": load(NOTES, []),
         "meals": load(MEALS, {}),
-        "diet": load(DIET, {}),
         "gi": load_gi(cfg),
         "vet": load_vet(cfg),
         "origins": load_origins(cfg),
@@ -1309,15 +1287,6 @@ def main():
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
     s.set_defaults(func=cmd_meal)
 
-    s = sub.add_parser("diet", help="record a diet change (closes the current food period, opens a new one)")
-    s.add_argument("--dog", help="which dog (default the primary one)")
-    s.add_argument("--food", required=True, help="the new food")
-    s.add_argument("--start", help="switch date YYYY-MM-DD (default today)")
-    s.add_argument("--reason", help="why the change / notes")
-    s.add_argument("--amount", help="portion, e.g. '2/3 cup BID'")
-    s.add_argument("--kcal-per-cup", dest="kcal_per_cup", type=int, help="calories per cup")
-    s.add_argument("--ingredients", help="full ingredient list (kept in the record)")
-    s.set_defaults(func=cmd_diet)
 
     s = sub.add_parser("gi", help="log a diarrhea incident")
     s.add_argument("--dog", help="which dog (default the primary one)")
