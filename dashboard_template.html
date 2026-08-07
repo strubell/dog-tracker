@@ -766,7 +766,7 @@ function renderHeatmap(dog) {
   rows.forEach((w, r) => {
     const mon = addDays(planStart, (w > 0 ? w - 1 : w) * 7);
     const yr = top + r * (cell + gap);
-    const label = (w > 0 && isPrimary) ? `W${w}` : fmtDay(mon);   // plan-week labels only for the plan dog
+    const label = fmtDay(mon);   // date labels for every row
     s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === planWeek ? "lbl" : ""}" ${w === planWeek ? 'font-weight="600"' : ""}>${label}</text>`;
     const ph = isPrimary ? phaseFor(Math.max(w, 1)) : null;
     for (let i = 0; i < 7; i++) {
@@ -1091,20 +1091,45 @@ function renderFood(dog) {
     ? `<div class="scroll">${svg}</div><div class="legend">${legend}</div>${controls}`
     : `<div class="sub">Nothing to log.</div>`;
 
-  // ----- diet & calorie history (derived from the dated feeding revisions) -----
+  // ----- calories/day over time (step chart from the dated feeding revisions) -----
   const revKcal = its => its.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
   const mainName = its => { const k = (its || []).find(it => it.cups || it.kcal_per_cup); return k ? k.item : ((its[0] && its[0].item) || ""); };
-  const dietRows = revisions.map((r, i) => {
-    const next = revisions[i + 1], its = r.items || [];
-    const range = !r.from ? "" : next ? `${r.from} – ${next.from}` : `since ${r.from}`;
-    const ing = summarizeIngredients(its.map(x => x.ingredients)).map(([c, l]) => `${c}: ${l.join(", ")}`).join(" · ");
-    return `<div class="diet-item"><div class="diet-h"><b>${Math.round(revKcal(its))} kcal/day</b> ` +
-      `<span class="d">${esc(range)}${!next ? " · current" : ""}</span></div>` +
-      `<div class="diet-r">${esc(mainName(its))}${r.note ? " — " + esc(r.note) : ""}</div>` +
-      `${ing ? `<div class="diet-ing">${esc(ing)}</div>` : ""}</div>`;
-  }).reverse().join("");
-  const dietBlock = revisions.length > 1
-    ? `<div class="food-sec"><div class="food-sec-h">Diet &amp; calorie history</div>${dietRows}</div>` : "";
+  const Tms = iso => +new Date(iso + "T00:00:00");
+  const segs = revisions.filter(r => r.from).map((r, i, arr) => ({
+    x0: Math.max(Tms(r.from), +planStart), x1: arr[i + 1] ? Tms(arr[i + 1].from) : +today,
+    kcal: Math.round(revKcal(r.items || [])), main: mainName(r.items || []),
+    from: r.from, to: arr[i + 1] ? arr[i + 1].from : null, note: r.note,
+  })).filter(s => s.x1 >= +planStart);
+  let dietBlock = "";
+  if (segs.length) {
+    const cW = 560, cH = 150, cL = 44, cR = 14, cTop = 12, cB = 22, pW = cW - cL - cR, pH = cH - cTop - cB;
+    const cx0 = +planStart, cx1 = Math.max(+today, ...segs.map(s => s.x1)) || +today;
+    const ks = segs.map(s => s.kcal);
+    let ymin = Math.min(...ks), ymax = Math.max(...ks);
+    const pad = Math.max(40, (ymax - ymin) * 0.6);
+    ymin = Math.floor((ymin - pad) / 50) * 50; ymax = Math.ceil((ymax + pad) / 50) * 50;
+    const cX = t => cL + pW * (t - cx0) / (cx1 - cx0 || 1);
+    const cY = v => cTop + pH * (1 - (v - ymin) / (ymax - ymin || 1));
+    let s = `<svg viewBox="0 0 ${cW} ${cH}" width="100%" style="min-width:320px" role="img" aria-label="${esc(dog)} calories per day over time">`;
+    for (let v = ymin; v <= ymax + 1; v += (ymax - ymin) / 3)
+      s += `<line x1="${cL}" x2="${cW - cR}" y1="${cY(v)}" y2="${cY(v)}" stroke="var(--grid)"/>` +
+           `<text x="${cL - 6}" y="${cY(v) + 4}" text-anchor="end">${Math.round(v)}</text>`;
+    for (let m = new Date(new Date(cx0).getFullYear(), new Date(cx0).getMonth(), 1); +m <= cx1; m.setMonth(m.getMonth() + 1))
+      if (+m >= cx0) s += `<text x="${cX(+m)}" y="${cH - 6}" text-anchor="middle">${m.toLocaleDateString(undefined, { month: "short" })}</text>`;
+    let path = `M ${cX(segs[0].x0)} ${cY(segs[0].kcal)}`;
+    segs.forEach((sg, i) => {
+      path += ` L ${cX(sg.x1)} ${cY(sg.kcal)}`;
+      if (segs[i + 1]) path += ` L ${cX(segs[i + 1].x0)} ${cY(segs[i + 1].kcal)}`;
+      const tip = `<b>${sg.kcal} kcal/day</b>${esc(sg.main)}<br>${sg.from}${sg.to ? " – " + sg.to : " – now"}${sg.note ? "<br>" + esc(sg.note) : ""}`;
+      s += `<rect x="${cX(sg.x0)}" y="${cTop}" width="${Math.max(1, cX(sg.x1) - cX(sg.x0))}" height="${pH}" fill="transparent" data-tip="${esc(tip)}"/>`;
+    });
+    s += `<path d="${path}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round"/>`;
+    const last = segs[segs.length - 1];
+    s += `<circle cx="${cX(last.x1)}" cy="${cY(last.kcal)}" r="3.5" fill="var(--series)" stroke="var(--surface)" stroke-width="1.5"/>` +
+         `<text x="${Math.min(cX(last.x1) + 6, cW - cR - 30)}" y="${cY(last.kcal) - 6}" class="lbl" font-weight="600">${last.kcal}</text>`;
+    s += `<line x1="${cL}" x2="${cW - cR}" y1="${cY(ymin)}" y2="${cY(ymin)}" stroke="var(--axis)"/></svg>`;
+    dietBlock = `<div class="food-sec"><div class="food-sec-h">Calories/day over time</div><div class="scroll">${s}</div></div>`;
+  }
 
   // ----- key ingredients (filtered; full lists live in config) -----
   const summ = summarizeIngredients([...feed, ...treats].map(x => x.ingredients));
@@ -1113,8 +1138,10 @@ function renderFood(dog) {
       summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") + `</div>`
     : "";
 
-  // left panel = the diet (ration + treats + key ingredients + diet history)
-  document.getElementById("feedBody").innerHTML = rationBlock + summBlock + dietBlock;
+  // left panel = the diet (ration + treats + key ingredients + calories-over-time)
+  const feedBody = document.getElementById("feedBody");
+  feedBody.innerHTML = rationBlock + summBlock + dietBlock;
+  bindTips(feedBody);
   // right panel = the daily eating log
   const eatBody = document.getElementById("eatBody");
   eatBody.innerHTML = eatContent;
