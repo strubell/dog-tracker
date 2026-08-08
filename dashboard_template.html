@@ -751,7 +751,7 @@ function renderHeatmap(dog) {
   for (let w = -preWeeks + 1; w <= endWeek; w++)
     if (w !== 0) rows.push(w);          // w<=0 pre-plan, w>=1 plan weeks
   const circUnans = new Set((DATA.circles_unansweredByDog || {})[dog] || []);
-  const cell = 26, gap = 2, top = 22, left = 44;
+  const cell = 26, gap = 2, top = 22, left = 56;   // room for date row labels
   const Wd = left + 7 * (cell + gap) + 90, Hd = top + rows.length * (cell + gap) + 6;
   const steps = [0, 15, 25, 35, 45, 60];
   const rampFor = min => {
@@ -1033,20 +1033,17 @@ function renderFood(dog) {
     }
     return { frac: known ? happened / total : null, happened, parts };
   };
-  // show a few pre-plan weeks (unlogged) so the plan boundary is visible
-  const preWeeks = 4;
-  const lastDataWk = Object.keys(meals).reduce((mx, k) =>
-    Math.max(mx, Math.floor((new Date(k + "T00:00:00") - planStart) / WEEK) + 1), 1);
-  const endWeek = Math.max(planWeek, lastDataWk, 1);
-  const weekNums = [];
-  for (let w = -preWeeks + 1; w <= endWeek; w++) if (w !== 0) weekNums.push(w);
-  const cell = 26, gap = 2, top = 22, left = 44;
-  const Wd = left + 7 * (cell + gap) + 10, Hd = top + weekNums.length * (cell + gap) + 6;
+  // rolling recent window: the last 5 weeks, Monday-aligned
+  const WEEKS_SHOWN = 5;
+  const startMon = addDays(mondayOf(today), -(WEEKS_SHOWN - 1) * 7);
+  const cell = 26, gap = 2, top = 22, left = 56;   // room for date row labels
+  const Wd = left + 7 * (cell + gap) + 10, Hd = top + WEEKS_SHOWN * (cell + gap) + 6;
   let svg = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="${esc(dog)} daily eating log">`;
   "MTWTFSS".split("").forEach((c, i) => svg += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
-  weekNums.forEach((w, r) => {
-    const mon = addDays(planStart, (w > 0 ? w - 1 : w) * 7), yr = top + r * (cell + gap);
-    svg += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${w === 1 ? "lbl" : ""}" ${w === 1 ? 'font-weight="600"' : ""}>${fmtDay(mon)}</text>`;
+  for (let r = 0; r < WEEKS_SHOWN; r++) {
+    const mon = addDays(startMon, r * 7), yr = top + r * (cell + gap);
+    const curWk = +mon === +mondayOf(today);
+    svg += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${curWk ? "lbl" : ""}" ${curWk ? 'font-weight="600"' : ""}>${fmtDay(mon)}</text>`;
     for (let i = 0; i < 7; i++) {
       const d = addDays(mon, i), k = localISO(d), x = left + i * (cell + gap);
       const future = d > today, rec = meals[k], st = dayStatus(rec, k);
@@ -1068,7 +1065,7 @@ function renderFood(dog) {
       if (rec && rec.other && !future)
         svg += `<path d="M ${x + cell - 8} ${yr + 2} l 6 0 l 0 6 z" fill="var(--ink)" pointer-events="none"/>`;
     }
-  });
+  }
   svg += `</svg>`;
   // one standardized legend for every dog: complete / (partial) / missed / not logged
   let legend = `<span class="sw" style="background:var(--eat-2)"></span><span>all eaten</span>`;
@@ -1109,12 +1106,13 @@ function renderFood(dog) {
   };
   let dietBlock = "";
   if (revisions.length) {
+    const chartStart = Math.max(+startMon, +planStart);   // same recent window as the calendar
     const daysArr = [];
-    for (let d = new Date(planStart); +d <= +today; d = addDays(d, 1))
+    for (let d = new Date(chartStart); +d <= +today; d = addDays(d, 1))
       daysArr.push({ t: +d, iso: localISO(d), kcal: Math.round(dayKcal(localISO(d))) });
     if (daysArr.length) {
       const cW = 560, cH = 150, cL = 44, cR = 14, cTop = 12, cB = 22, pW = cW - cL - cR, pH = cH - cTop - cB;
-      const cx0 = +planStart, cx1 = Math.max(+addDays(today, 1), +addDays(planStart, 8));
+      const cx0 = chartStart, cx1 = Math.max(+addDays(today, 1), +addDays(chartStart, 8));
       const ks = daysArr.map(p => p.kcal);
       let ymin = Math.min(...ks), ymax = Math.max(...ks);
       if (ymin === ymax) { ymin -= 50; ymax += 50; }
@@ -1154,13 +1152,11 @@ function renderFood(dog) {
       summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") + `</div>`
     : "";
 
-  // left panel = the diet (ration + treats + key ingredients + calories-over-time)
-  const feedBody = document.getElementById("feedBody");
-  feedBody.innerHTML = rationBlock + summBlock + dietBlock;
-  bindTips(feedBody);
-  // right panel = the daily eating log
+  // left panel = the diet (ration + treats + key ingredients)
+  document.getElementById("feedBody").innerHTML = rationBlock + summBlock;
+  // right panel = the daily eating log + calories/day over the recent window
   const eatBody = document.getElementById("eatBody");
-  eatBody.innerHTML = eatContent;
+  eatBody.innerHTML = eatContent + dietBlock;
   bindTips(eatBody);
   if (DATA.live && window.logMeal) {
     eatBody.querySelectorAll(".eatchip").forEach(b =>
