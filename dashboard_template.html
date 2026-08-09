@@ -955,7 +955,7 @@ function renderRecent(dog) {
 // allergy/health-relevant components (proteins, grains/starches, a few to watch)
 // and drop the vitamin/mineral/amino-acid/preservative/probiotic/additive tail.
 const ING_CATS = [
-  { cat: "Proteins", kws: ["salmon","fish","herring","trout","cod","whitefish","lamb","chicken","beef","turkey","duck","pork","egg","whey","milk","cheese","yogurt","liver","venison","bison","rabbit","quail","pheasant"] },
+  { cat: "Proteins", kws: ["salmon","fish","herring","trout","cod","whitefish","lamb","chicken","beef","turkey","duck","pork","egg","whey","milk","cheese","yogurt","venison","bison","rabbit","quail","pheasant"] },
   { cat: "Grains & starches", kws: ["barley","sorghum","millet","rice","wheat","corn","oatmeal","oat","sweet potato","potato","quinoa","peas","pea","lentil","chickpea","garbanzo","tapioca","buckwheat","rye"] },
   { cat: "Other to watch", kws: ["garlic","brewers yeast","yeast","soy"] },
 ];
@@ -963,6 +963,7 @@ const ING_LABEL = { whey: "Whey (dairy)", milk: "Dairy", cheese: "Dairy", yogurt
   "sweet potato": "Sweet potato", "brewers yeast": "Yeast", pea: "Peas", peas: "Peas",
   garbanzo: "Chickpea", oatmeal: "Oats", oat: "Oats" };
 function classifyIngredient(tokenLc, words) {
+  if (/\boil\b/.test(tokenLc)) return null;   // oils are fats, not a protein/grain source (e.g. "salmon oil")
   for (const { cat, kws } of ING_CATS)
     for (const kw of [...kws].sort((a, b) => b.length - a.length)) {   // longest kw first
       const hit = kw.includes(" ")
