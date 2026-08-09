@@ -955,26 +955,30 @@ function renderRecent(dog) {
 // allergy/health-relevant components (proteins, grains/starches, a few to watch)
 // and drop the vitamin/mineral/amino-acid/preservative/probiotic/additive tail.
 const ING_CATS = [
-  { cat: "Proteins", kws: ["salmon","fish","herring","trout","cod","whitefish","lamb","chicken","beef","turkey","duck","pork","egg","whey","milk","cheese","yogurt","venison","bison","rabbit","quail","pheasant"] },
+  { cat: "Proteins", kws: ["salmon","fish","herring","trout","cod","whitefish","krill","mussel","shellfish","shrimp","crab","lamb","chicken","beef","turkey","duck","pork","egg","whey","milk","cheese","yogurt","venison","bison","rabbit","quail","pheasant"] },
   { cat: "Grains & starches", kws: ["barley","sorghum","millet","rice","wheat","corn","oatmeal","oat","sweet potato","potato","quinoa","peas","pea","lentil","chickpea","garbanzo","tapioca","buckwheat","rye"] },
   { cat: "Other to watch", kws: ["garlic","brewers yeast","yeast","soy"] },
 ];
 const ING_LABEL = { whey: "Whey (dairy)", milk: "Dairy", cheese: "Dairy", yogurt: "Dairy",
   "sweet potato": "Sweet potato", "brewers yeast": "Yeast", pea: "Peas", peas: "Peas",
-  garbanzo: "Chickpea", oatmeal: "Oats", oat: "Oats" };
+  garbanzo: "Chickpea", oatmeal: "Oats", oat: "Oats", mussel: "Green-lipped mussel" };
+// Classify an ingredient token. Returns {cat, base, oil}: `base` is the matched
+// keyword (so meat and oil forms of the same source dedupe), `oil` flags an
+// oil/fat form (e.g. "salmon oil" — trace protein, but still allergen-relevant).
+// Plain refined plant oils (olive/canola) match no keyword and are dropped.
 function classifyIngredient(tokenLc, words) {
-  if (/\boil\b/.test(tokenLc)) return null;   // oils are fats, not a protein/grain source (e.g. "salmon oil")
+  const oil = /\boil\b/.test(tokenLc);
   for (const { cat, kws } of ING_CATS)
     for (const kw of [...kws].sort((a, b) => b.length - a.length)) {   // longest kw first
       const hit = kw.includes(" ")
         ? tokenLc.includes(kw)
         : words.some(w => w === kw || w === kw + "s" || w === kw + "es" || (kw.length >= 5 && w.startsWith(kw)));
-      if (hit) return { cat, label: ING_LABEL[kw] || kw.charAt(0).toUpperCase() + kw.slice(1) };
+      if (hit) return { cat, base: kw, oil };
     }
   return null;
 }
 function summarizeIngredients(strings) {
-  const groups = new Map();
+  const groups = new Map();   // cat -> Map(base -> {meat, oil})
   for (const s of strings) {
     if (!s) continue;
     for (const tok of s.split(",")) {
@@ -982,11 +986,20 @@ function summarizeIngredients(strings) {
       if (!t) continue;
       const c = classifyIngredient(t, t.split(/[^a-z]+/).filter(Boolean));
       if (!c) continue;
-      if (!groups.has(c.cat)) groups.set(c.cat, []);
-      if (!groups.get(c.cat).includes(c.label)) groups.get(c.cat).push(c.label);
+      if (!groups.has(c.cat)) groups.set(c.cat, new Map());
+      const m = groups.get(c.cat), rec = m.get(c.base) || { meat: false, oil: false };
+      if (c.oil) rec.oil = true; else rec.meat = true;
+      m.set(c.base, rec);
     }
   }
-  return ING_CATS.map(({ cat }) => [cat, groups.get(cat) || []]).filter(([, a]) => a.length);
+  // "(oil)" tag only when a source appears solely as an oil (else the meat form covers it)
+  const label = (base, rec) => (ING_LABEL[base] || base.charAt(0).toUpperCase() + base.slice(1))
+    + (rec.oil && !rec.meat ? " (oil)" : "");
+  return ING_CATS.map(({ cat }) => {
+    const m = groups.get(cat);
+    const labels = m ? [...m].map(([b, rec]) => label(b, rec)) : [];
+    return [cat, labels.filter((l, i) => labels.indexOf(l) === i)];   // dedupe by final label
+  }).filter(([, a]) => a.length);
 }
 
 // ---- unified feeding & eating (both dogs): ration + daily log + diet history + key ingredients
@@ -1147,7 +1160,13 @@ function renderFood(dog) {
   }
 
   // ----- key ingredients (filtered; full lists live in config) -----
-  const summ = summarizeIngredients([...feed, ...treats].map(x => x.ingredients));
+  // include any supplement/med taken today that carries ingredients (e.g. the
+  // joint supplement's shellfish), so the allergen picture is complete
+  const iso = localISO(today);
+  const medIng = (((cfg.profiles || {})[dog] || {}).daily_medications || [])
+    .filter(m => m.ingredients && (!m.start || m.start <= iso) && (!m.end || m.end >= iso))
+    .map(m => m.ingredients);
+  const summ = summarizeIngredients([...feed, ...treats].map(x => x.ingredients).concat(medIng));
   const summBlock = summ.length
     ? `<div class="food-sec"><div class="food-sec-h">Key ingredients <span class="d" style="text-transform:none;font-weight:400;letter-spacing:0">(allergy / health-relevant)</span></div>` +
       summ.map(([cat, labels]) => `<div class="ingsum-row"><span class="ingsum-cat">${cat}:</span> ${labels.map(esc).join(", ")}</div>`).join("") + `</div>`
