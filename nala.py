@@ -364,7 +364,7 @@ def cmd_sync(args):
     if interactive:
         _ask_circles(cfg, db)
     else:
-        nc = len(unanswered_circle_days(cfg, db))
+        nc = len(set().union(*(set(unanswered_circle_days(cfg, db, d)) for d in dog_names(cfg))))
         if nc:
             print(f"{nc} circle day(s) unanswered — run `python3 nala.py sync` interactively "
                   f"or `python3 nala.py circle yes --date YYYY-MM-DD`.")
