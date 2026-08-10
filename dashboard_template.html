@@ -295,6 +295,7 @@
   .mednext { font-size: 12px; color: var(--ink-2); margin-top: 8px; display: flex;
              flex-direction: column; gap: 4px; }
   .mednext .sw { width: 10px; height: 10px; display: inline-block; margin-right: 7px; vertical-align: -1px; }
+  rect.eatcell { cursor: pointer; }
   .mededitor { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); font-size: 14px; }
   .mededitor.hide { display: none; }
   .mededitor input { font: inherit; font-size: 14px; padding: 6px 9px; border-radius: 8px;
@@ -370,6 +371,7 @@
       <h2>Eating</h2>
       <div class="sub">Daily log</div>
       <div id="eatBody"></div>
+      <div class="mededitor hide" id="foodEditor"></div>
     </div>
   </div>
 
@@ -1071,7 +1073,7 @@ function renderFood(dog) {
               return `${esc(p.it.label)}: ${ok ? "✓" : "✗ skipped" + kc}`;
             }).join(" · ");
         if (rec && rec.other) t += `<br>◆ ${esc(rec.other)}`;
-        attrs = ` data-tip="${esc(t)}"`;
+        attrs = ` data-tip="${esc(t)}" data-iso="${k}" class="eatcell"`;   // clickable to edit
       }
       svg += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4" fill="${fill}"` +
              ` stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}" stroke-width="${+d === +today ? 1.5 : 1}"` +
@@ -1184,6 +1186,8 @@ function renderFood(dog) {
       b.onclick = () => window.logMeal(dog, { [b.dataset.key]: b.dataset.skipped === "true" }));
     const ob = eatBody.querySelector("#foodOtherBtn");
     if (ob) ob.onclick = () => { const v = eatBody.querySelector("#foodOther").value.trim(); if (v) window.logMeal(dog, { other: v }); };
+    if (window.openFoodEditor)
+      eatBody.querySelectorAll("rect.eatcell").forEach(r => r.onclick = () => window.openFoodEditor(dog, r.dataset.iso));
   }
 }
 
@@ -1761,6 +1765,34 @@ if (DATA.live) {
   }
 
   // medications: tap a calendar day to mark daily doses given/skipped or add a one-off
+  window.openFoodEditor = (dog, iso) => {
+    const items = (cfg.daily_log || {})[dog] || [];
+    const rec = ((DATA.meals || {})[dog] || {})[iso] || {};
+    const ed = document.getElementById("foodEditor");
+    ed.classList.remove("hide");
+    // default a checkbox to "ate" per the same rule the calendar uses: explicit value wins,
+    // else assume yes only from the plan onward (pre-plan days stay unlogged until set here)
+    const ate = it => rec[it.key] === true ? true : rec[it.key] === false ? false : (it.assume && iso >= cfg.plan_start);
+    ed.innerHTML =
+      `<div style="font-weight:600;margin-bottom:6px">${fmtDay(new Date(iso + "T00:00:00"))}, ${iso.slice(0, 4)}</div>` +
+      (items.length
+        ? items.map(it => `<label style="display:block;margin:4px 0"><input type="checkbox" class="ate" data-key="${esc(it.key)}" ${ate(it) ? "checked" : ""}> ${esc(it.label)} <span class="d">ate</span></label>`).join("")
+        : `<div class="d">Nothing tracked.</div>`) +
+      `<div class="mgrp" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">` +
+      `<input id="foodEdOther" placeholder="different/new food…" value="${esc(rec.other || "")}" style="width:160px">` +
+      `<button class="btn primary" id="foodEdSave">Save</button>` +
+      `<button class="btn" id="foodEdCancel">Cancel</button></div>`;
+    document.getElementById("foodEdCancel").onclick = () => ed.classList.add("hide");
+    document.getElementById("foodEdSave").onclick = async () => {
+      const patch = { dog, date: iso, other: document.getElementById("foodEdOther").value.trim() };
+      ed.querySelectorAll(".ate").forEach(c => { patch[c.dataset.key] = c.checked; });
+      try {
+        await post("/api/meal", patch);
+        flash("Saved — reloading…"); setTimeout(() => location.reload(), 700);
+      } catch (e) { flash("Failed: " + e.message, 4000); }
+    };
+  };
+
   window.openMedEditor = (dog, iso) => {
     const M = (DATA.meds || {})[dog] || {}, log = (M.log || {})[iso] || {};
     const skip = new Set(log.skip || []);
