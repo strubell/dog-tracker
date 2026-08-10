@@ -1120,19 +1120,37 @@ function renderFood(dog) {
 
   // ----- actual calories/day over time: ration in effect each day, minus the
   // meals/bone the eating log records as skipped (so skip days dip accurately) -----
-  const revAt = iso => revisions.filter(r => !r.from || r.from <= iso).slice(-1)[0] || revisions[0];
+  // a revision can start at a specific meal (from_meal), so a mid-day food swap is
+  // exact: each meal draws on the ration in effect *at that meal*, not just that day.
+  const MEAL_ORDER = ["breakfast", "dinner"];   // meals in the order they happen
+  const mealIdx = m => { const i = MEAL_ORDER.indexOf(m); return i < 0 ? 0 : i; };
+  const revAtMeal = (iso, mi) => {
+    let best = revisions[0];
+    for (const r of revisions) {
+      const rd = r.from || "", rmi = r.from_meal ? mealIdx(r.from_meal) : 0;
+      if (!r.from || rd < iso || (rd === iso && rmi <= mi)) best = r;
+    }
+    return best;
+  };
+  const revAt = iso => revAtMeal(iso, MEAL_ORDER.length - 1);   // ration in effect by day's end
+  const foodMealK = rev => {
+    const kib = (rev.items || []).find(it => it.cups && it.kcal_per_cup);   // per-meal food
+    return kib ? kib.cups * kib.kcal_per_cup : 0;
+  };
   const dayKcal = iso => {
-    const rev = revAt(iso); if (!rev) return null;
-    const its = rev.items || [];
-    const kib = its.find(it => it.cups && it.kcal_per_cup);   // kibble, split into 2 meals
-    const mealK = kib ? kib.cups * kib.kcal_per_cup : 0;
+    if (!revisions.length) return null;
+    const log = meals[iso] || {};
+    // each meal uses the ration in effect at that meal (skips drop that meal)
+    let food = 0;
+    MEAL_ORDER.forEach((m, i) => { if (log[m] !== false) food += foodMealK(revAtMeal(iso, i)); });
+    // once-a-day extras (bone, powder, pills) come from the ration in effect at day's end
+    const its = (revAt(iso).items || []);
+    const kib = its.find(it => it.cups && it.kcal_per_cup);
     const bone = its.find(it => /dental bone/i.test(it.item || ""));
-    const boneK = bone ? (bone.kcal || 0) : 0;
+    const boneK = (bone && log.dental !== false) ? (bone.kcal || 0) : 0;
     const otherK = its.filter(it => it !== kib && it !== bone)  // powder, pill buddies — always given
       .reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? (it.cups || 0) * (it.kcal_per_cup || 0)), 0);
-    const log = meals[iso] || {};
-    return (log.breakfast !== false ? mealK : 0) + (log.dinner !== false ? mealK : 0)
-         + (log.dental !== false ? boneK : 0) + otherK;
+    return food + boneK + otherK;
   };
   let dietBlock = "";
   if (revisions.length) {
