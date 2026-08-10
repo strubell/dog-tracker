@@ -926,6 +926,42 @@ def _resolve_record_pdf(filename, actual):
     return best
 
 
+def add_vet_document(dog, filename, raw, date=None, provider=None,
+                     doc_type=None, note=None):
+    """Save an uploaded vet document into vet_records/ and append a matching
+    encounter (linked to it) in data/<dog>_vet_records.json. Returns the stored
+    filename. Raises ValueError for an unsupported file type."""
+    import re
+    recdir = BASE / "vet_records"
+    recdir.mkdir(exist_ok=True)
+    stem, ext = os.path.splitext(os.path.basename(filename or "document"))
+    ext = ext.lower()
+    if ext not in (".pdf", ".jpg", ".jpeg", ".png"):
+        raise ValueError("unsupported file type (use PDF, JPG, or PNG)")
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._") or "document"
+    name, dest, i = stem + ext, recdir / (stem + ext), 1
+    while dest.exists():                       # never overwrite an existing record
+        name = f"{stem}-{i}{ext}"; dest = recdir / name; i += 1
+    dest.write_bytes(raw)
+    p = DATA / f"{dog.lower()}_vet_records.json"
+    data = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+        except Exception:
+            data = {}
+    d = date or datetime.now(tz()).date().isoformat()
+    enc = {"encounter_id": f"{dog.lower()}_upload_{d}_{stem}"[:90],
+           "date": d, "provider": provider or None,
+           "type": doc_type or "uploaded document",
+           "source": [name], "added_via": "dashboard upload"}
+    if note:
+        enc["findings"] = note
+    data.setdefault("encounters", []).append(enc)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    return name
+
+
 def load_vet(cfg):
     """Per-dog vet encounter timeline from data/<dog>_vet_records.json, with each
     encounter linked to its source document in vet_records/ where resolvable."""
@@ -1200,6 +1236,16 @@ def cmd_serve(args):
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
                     log_med(body["dog"], d, body.get("skip"), body.get("add"))
                     return self._send(200, json.dumps({"ok": True}))
+                if self.path == "/api/vet_upload":
+                    import base64
+                    raw = base64.b64decode(body.get("data", ""))   # binascii.Error → ValueError → 400
+                    if len(raw) > 30 * 1024 * 1024:
+                        return self._send(400, json.dumps({"error": "file too large (max 30 MB)"}))
+                    name = add_vet_document(
+                        body["dog"], body.get("filename", ""), raw,
+                        body.get("date"), body.get("provider"),
+                        body.get("type"), body.get("note"))
+                    return self._send(200, json.dumps({"ok": True, "file": name}))
             except urllib.error.HTTPError as e:
                 return self._send(502, json.dumps({"error": f"Strava API: {e.code}"}))
             except (KeyError, ValueError) as e:

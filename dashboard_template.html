@@ -438,6 +438,8 @@
     <h2>Vet history</h2>
     <div class="sub" id="vetSub">Documented visits, newest first</div>
     <div class="vet" id="vetList"></div>
+    <button class="btn" id="vetUploadToggle" style="display:none; margin-top:12px">＋ Upload document</button>
+    <div class="mededitor hide" id="vetUploadForm"></div>
   </div>
 </div>
 <div id="tip"></div>
@@ -1346,9 +1348,16 @@ function renderOrigins(dog) {
 function renderVet(dog) {
   const card = document.getElementById("vetCard");
   const items = (DATA.vet || {})[dog] || [];
-  card.style.display = (card.dataset.onpage !== "0" && items.length) ? "" : "none";
-  document.getElementById("vetSub").textContent =
-    `Documented visits, newest first · ${items.length} on record`;
+  // in live mode keep the card visible even with no records, so you can upload the first one
+  card.style.display = (card.dataset.onpage !== "0" && (items.length || DATA.live)) ? "" : "none";
+  document.getElementById("vetSub").textContent = items.length
+    ? `Documented visits, newest first · ${items.length} on record`
+    : "No documents yet";
+  const up = document.getElementById("vetUploadToggle");
+  if (up) {
+    if (DATA.live && window.openVetUpload) { up.style.display = ""; up.onclick = () => window.openVetUpload(dog); }
+    else up.style.display = "none";
+  }
   document.getElementById("vetList").innerHTML = items.map(e => {
     const loc = [e.provider, e.weight != null ? e.weight + " lb" : ""].filter(Boolean).join(" · ");
     const src = (e.sources || []).map((p, i) =>
@@ -1770,6 +1779,51 @@ if (DATA.live) {
       flash(`${dog}: logged — reloading…`);
       setTimeout(() => location.reload(), 700);
     } catch (e) { flash("Failed: " + e.message, 4000); }
+  };
+
+  // upload a vet document (PDF/image): stored in vet_records/, linked from a new
+  // entry in the dog's vet history (renderVet wires the toggle button to this)
+  window.openVetUpload = (dog) => {
+    const ed = document.getElementById("vetUploadForm");
+    if (!ed.classList.contains("hide")) { ed.classList.add("hide"); return; }   // toggle off
+    ed.classList.remove("hide");
+    ed.innerHTML =
+      `<div style="font-weight:600;margin-bottom:8px">Upload a document for ${esc(dog)}</div>` +
+      `<div style="display:flex;flex-direction:column;gap:8px;max-width:440px">` +
+      `<input type="file" id="vetFile" accept=".pdf,.jpg,.jpeg,.png">` +
+      `<div style="display:flex;gap:6px;flex-wrap:wrap">` +
+        `<input id="vetDate" type="date" value="${localISO(today)}" style="width:150px">` +
+        `<input id="vetProvider" placeholder="provider / clinic" style="width:200px"></div>` +
+      `<input id="vetType" placeholder="type — e.g. lab results, invoice, discharge" style="width:100%">` +
+      `<textarea id="vetNote" placeholder="notes (optional)" rows="2" style="font:inherit;font-size:14px;padding:6px 9px;border-radius:8px;border:1px solid var(--grid);background:var(--surface);color:var(--ink)"></textarea>` +
+      `<div class="mgrp" style="display:flex;gap:6px"><button class="btn primary" id="vetSave">Upload</button>` +
+      `<button class="btn" id="vetCancel">Cancel</button></div></div>`;
+    document.getElementById("vetCancel").onclick = () => ed.classList.add("hide");
+    document.getElementById("vetSave").onclick = async () => {
+      const f = document.getElementById("vetFile").files[0];
+      if (!f) { flash("Choose a file first"); return; }
+      if (f.size > 30 * 1024 * 1024) { flash("File too large (max 30 MB)", 4000); return; }
+      let b64;
+      try {
+        b64 = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(String(r.result).split(",")[1]);
+          r.onerror = () => rej(new Error("could not read file"));
+          r.readAsDataURL(f);
+        });
+      } catch (e) { flash("Failed: " + e.message, 4000); return; }
+      try {
+        flash("Uploading…", 60000);
+        await post("/api/vet_upload", {
+          dog, filename: f.name, data: b64,
+          date: document.getElementById("vetDate").value || null,
+          provider: document.getElementById("vetProvider").value.trim() || null,
+          type: document.getElementById("vetType").value.trim() || null,
+          note: document.getElementById("vetNote").value.trim() || null,
+        });
+        flash("Uploaded — reloading…"); setTimeout(() => location.reload(), 800);
+      } catch (e) { flash("Failed: " + e.message, 5000); }
+    };
   };
 
   // diarrhea incident logging (Pepper's diarrhea card)
