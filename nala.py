@@ -721,6 +721,28 @@ def _vet_val(v):
     return str(v)
 
 
+def _corr_label(k):
+    """Turn an extracted_facts key like 'gi_status_2024_08_20' into 'Gi status'."""
+    import re
+    k = re.sub(r"_\d{4}(_\d{2}){0,2}$", "", str(k))     # drop a trailing date suffix
+    return k.replace("_", " ").strip().capitalize()
+
+
+def _corr_entry(m):
+    """Shape a correspondence message for the dashboard: date, who, and the
+    extracted facts as label/text lines."""
+    facts = []
+    ef = m.get("extracted_facts")
+    if isinstance(ef, dict):
+        for k, v in ef.items():
+            facts.append({"label": _corr_label(k), "text": _vet_val(v)})
+    elif ef:
+        facts.append({"label": "", "text": _vet_val(ef)})
+    who = " → ".join(x for x in (m.get("from"), m.get("to")) if x) or None
+    return {"date": m.get("date"), "who": who,
+            "purpose": m.get("purpose"), "facts": facts}
+
+
 _VAX_GROUPS = [
     ("Rabies", ["rabies"]),
     ("DHPP", ["dhpp", "distemper", "parvovirus"]),
@@ -985,6 +1007,13 @@ def load_vet(cfg):
             match = _resolve_record_pdf(fn, actual)
             if match:
                 docmap[sd.get("doc_id")] = "vet_records/" + match
+        # correspondence (emails / follow-up messages): index by id, and by the
+        # encounter each one relates to, so it can be shown under that visit
+        corr_by_id, corr_by_enc = {}, {}
+        for m in raw.get("correspondence", {}).get("messages", []):
+            corr_by_id[m.get("msg_id")] = m
+            for eid in (m.get("relates_to_encounter") or []):
+                corr_by_enc.setdefault(eid, []).append(m)
         items = []
         for e in raw.get("encounters", []):
             lines = []
@@ -1009,6 +1038,15 @@ def load_vet(cfg):
                         pth = "vet_records/" + match
                 if pth and pth not in paths:
                     paths.append(pth)
+            # collect this encounter's correspondence (from either direction of link)
+            cmsgs, seen = [], set()
+            for ref in (e.get("follow_up_correspondence") or []):
+                m = corr_by_id.get(ref.get("msg_id"))
+                if m and id(m) not in seen:
+                    cmsgs.append(m); seen.add(id(m))
+            for m in corr_by_enc.get(e.get("encounter_id"), []):
+                if id(m) not in seen:
+                    cmsgs.append(m); seen.add(id(m))
             items.append({
                 "date": e.get("date"),
                 "provider": e.get("provider"),
@@ -1016,6 +1054,8 @@ def load_vet(cfg):
                 "weight": e.get("weight_lb"),
                 "lines": lines,
                 "sources": paths,
+                "correspondence": [_corr_entry(m) for m in
+                                   sorted(cmsgs, key=lambda x: str(x.get("date") or ""))],
             })
         items.sort(key=lambda x: (x["date"] or ""), reverse=True)
         if items:
