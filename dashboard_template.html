@@ -181,6 +181,15 @@
   ul.notes { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   ul.notes li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
   ul.notes .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  /* click a food/treat to expand its full ingredient list */
+  li details.ing > summary { cursor: pointer; list-style: none; outline: none; }
+  li details.ing > summary::-webkit-details-marker { display: none; }
+  li details.ing > summary::before { content: "\25B8"; color: var(--ink-muted); font-size: 10px;
+    margin-right: 7px; display: inline-block; transition: transform .12s ease; }
+  li details.ing[open] > summary::before { transform: rotate(90deg); }
+  li details.ing > summary:hover { color: var(--series); }
+  li details.ing .ingfull { margin: 6px 0 1px 17px; font-size: 12.5px; line-height: 1.55;
+    color: var(--ink-muted); }
   .treats { margin-top: 14px; }
   .treats-h { font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase;
               letter-spacing: .03em; margin-bottom: 2px; }
@@ -1021,13 +1030,18 @@ function renderFood(dog) {
 
   // ----- current ration + treats -----
   const kcal = feed.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
+  // a row is a plain <li>, or — if the item lists ingredients — a click-to-expand
+  // <details> revealing the full ingredient list
+  const ingRow = (head, ingredients) => ingredients
+    ? `<li><details class="ing"><summary>${head}</summary><div class="ingfull">${esc(ingredients)}</div></details></li>`
+    : `<li>${head}</li>`;
   const rows = feed.map(it => {
     const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
     const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup` : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
-    return `<li>${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span></li>`;
+    return ingRow(`${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span>`, it.ingredients);
   }).join("");
   const treatRows = treats.map(t =>
-    `<li>${esc(t.item)}${t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : ""}</li>`).join("");
+    ingRow(`${esc(t.item)}${t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : ""}`, t.ingredients)).join("");
   const treatBlock = treats.length
     ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div><ul class="notes">${treatRows}</ul></div>` : "";
   const rationBlock =
