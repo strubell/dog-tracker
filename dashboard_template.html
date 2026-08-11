@@ -281,6 +281,18 @@
   .vet .vcorr { margin: 9px 0 3px; padding: 8px 11px; border-left: 2px solid var(--series);
     background: var(--band); border-radius: 0 6px 6px 0; }
   .vet .vcorr-h { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 5px; }
+  .vet .vfu-btn { margin-top: 8px; font-size: 12px; padding: 3px 9px; }
+  .vetopen { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--grid); }
+  .vetopen > summary { cursor: pointer; list-style: none; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .03em; color: var(--ink-2); }
+  .vetopen > summary::-webkit-details-marker { display: none; }
+  .vetopen > summary::before { content: "▸"; color: var(--ink-muted); margin-right: 7px; display: inline-block; }
+  .vetopen[open] > summary::before { content: "▾"; }
+  .vetopen .oi { margin: 6px 0 6px 4px; }
+  .vetopen .oi { font-size: 13px; line-height: 1.5; margin: 4px 0; padding-left: 16px; position: relative; }
+  .vetopen .oi::before { content: "•"; position: absolute; left: 3px; color: var(--ink-muted); }
+  .vetopen .oi .why { color: var(--ink-muted); }
+  .vetopen .oi .who { color: var(--series); font-size: 11px; }
   .dogtag { display: inline-block; font-size: 11px; font-weight: 700; color: #fff;
             padding: 1px 8px; border-radius: 999px; margin-right: 8px; vertical-align: 1px; }
 
@@ -442,6 +454,7 @@
     <h2>Vet history</h2>
     <div class="sub" id="vetSub">Documented visits, newest first</div>
     <div class="vet" id="vetList"></div>
+    <div id="vetOpen"></div>
     <button class="btn" id="vetUploadToggle" style="display:none; margin-top:12px">＋ Upload document</button>
     <div class="mededitor hide" id="vetUploadForm"></div>
   </div>
@@ -1352,8 +1365,10 @@ function renderOrigins(dog) {
 function renderVet(dog) {
   const card = document.getElementById("vetCard");
   const items = (DATA.vet || {})[dog] || [];
+  const open = (DATA.vet_open || {})[dog];
+  const hasOpen = open && ((open.pending || []).length || (open.questions || []).length);
   // in live mode keep the card visible even with no records, so you can upload the first one
-  card.style.display = (card.dataset.onpage !== "0" && (items.length || DATA.live)) ? "" : "none";
+  card.style.display = (card.dataset.onpage !== "0" && (items.length || hasOpen || DATA.live)) ? "" : "none";
   document.getElementById("vetSub").textContent = items.length
     ? `Documented visits, newest first · ${items.length} on record`
     : "No documents yet";
@@ -1374,17 +1389,37 @@ function renderVet(dog) {
       `<div class="vline"><b>${esc(l.label)}:</b> ${esc(l.text)}</div>`).join("");
     // follow-up correspondence (emails / phoned-in results) attached to this visit
     const corrHtml = corr.map(c => {
-      const head = `✉ Follow-up${c.date ? " · " + esc(c.date) : ""}` +
+      const ic = c.channel === "phone" ? "📞" : c.channel === "note" ? "📝" : "✉";
+      const head = `${ic} Follow-up${c.date ? " · " + esc(c.date) : ""}` +
                    `${c.who ? ` <span class="d">· ${esc(c.who)}</span>` : ""}`;
       const facts = (c.facts || []).map(f =>
         `<div class="vline">${f.label ? `<b>${esc(f.label)}:</b> ` : ""}${esc(f.text)}</div>`).join("");
       return `<div class="vcorr"><div class="vcorr-h">${head}</div>${facts}</div>`;
     }).join("");
-    return `<details class="vh-item">${summary}<div class="vbody">${lines}${corrHtml}</div></details>`;
+    // live: a lightweight "add follow-up note" affordance attached to this visit
+    const fu = (DATA.live && e.id) ? `<button class="btn vfu-btn" data-eid="${esc(e.id)}">＋ follow-up note</button><div class="vfu-slot"></div>` : "";
+    return `<details class="vh-item">${summary}<div class="vbody">${lines}${corrHtml}${fu}</div></details>`;
   }).join("");
   // clicking a source link opens the PDF without toggling the expander
   document.getElementById("vetList").querySelectorAll(".srclink").forEach(a =>
     a.addEventListener("click", ev => ev.stopPropagation()));
+  if (DATA.live && window.openVetFollowup)
+    document.getElementById("vetList").querySelectorAll(".vfu-btn").forEach(b =>
+      b.onclick = () => window.openVetFollowup(dog, b.dataset.eid, b.nextElementSibling));
+
+  // pending / missing results + open questions (otherwise invisible in the record)
+  const oEl = document.getElementById("vetOpen");
+  if (hasOpen) {
+    let h = "";
+    if ((open.pending || []).length)
+      h += `<details class="vetopen"><summary class="vetopen-h">Pending / missing results (${open.pending.length})</summary>` +
+        open.pending.map(x => `<div class="oi">${esc(x.item)}${x.who ? ` <span class="who">(${esc(x.who)})</span>` : ""}` +
+          `${x.why ? `<div class="why">${esc(x.why)}</div>` : ""}</div>`).join("") + `</details>`;
+    if ((open.questions || []).length)
+      h += `<details class="vetopen"><summary class="vetopen-h">Open questions (${open.questions.length})</summary>` +
+        open.questions.map(q => `<div class="oi">${esc(q)}</div>`).join("") + `</details>`;
+    oEl.innerHTML = h;
+  } else oEl.innerHTML = "";
 }
 
 // ---- medications calendar (per dog, one month at a time) --------------------------
@@ -1548,17 +1583,19 @@ function renderDiarrhea(dog) {
       if (d > today) continue;
       const rec = days[localISO(d)];
       const fill = rec ? giFill(rec) : "var(--surface)";
+      const op = rec && rec.fade != null ? Math.max(0.06, rec.fade) : 1;   // fading, uncertain tail
       const x = left + c * (cell + gap), y = top + r * (cell + gap);
       let attrs = "";
       if (rec) {
         const t = rec.lvl === "parasite"
           ? `<b>${fmtDay(d)} ${d.getFullYear()}</b>documented parasite` + (rec.note ? `<br>${esc(rec.note)}` : "")
           : `<b>${fmtDay(d)} ${d.getFullYear()}</b>${esc(rec.lvl === "chronic" ? "chronic low-grade" : rec.sev)} diarrhea`
+              + (rec.fade != null ? " · resolving (exact end unknown)" : "")
               + (rec.blood ? " · blood" : "");
         attrs = ` data-tip="${esc(t)}"`;
       }
       s += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${fill}"` +
-           ` stroke="var(--grid)" stroke-width="0.5"${attrs}/>`;
+           ` fill-opacity="${op}" stroke="var(--grid)" stroke-width="0.5"${attrs}/>`;
       if (rec && rec.blood)
         s += `<path d="M ${x + cell / 2} ${y + 1.5} l ${cell / 2 - 1.5} ${cell / 2 - 1.5} l ${-(cell / 2 - 1.5)} ${cell / 2 - 1.5} l ${-(cell / 2 - 1.5)} ${-(cell / 2 - 1.5)} z" fill="var(--ink)" pointer-events="none"/>`;
     }
@@ -1572,6 +1609,7 @@ function renderDiarrhea(dog) {
     `<span>severity:</span>` +
     ["mild", "moderate", "severe"].map(v => `<span class="sw" style="background:var(--gi-${v})"></span><span>${v}</span>`).join("") +
     `<span class="sw" style="background:var(--gi-chronic)"></span><span>chronic</span>` +
+    `<span class="sw" style="background:var(--gi-chronic);opacity:.35"></span><span>resolving (end unknown)</span>` +
     `<span class="sw" style="background:var(--gi-parasite)"></span><span>parasite</span>` +
     `<span style="margin-left:8px">◆ blood</span>`;
   // raw-log table
@@ -1793,6 +1831,32 @@ if (DATA.live) {
       flash(`${dog}: logged — reloading…`);
       setTimeout(() => location.reload(), 700);
     } catch (e) { flash("Failed: " + e.message, 4000); }
+  };
+
+  // add a dated follow-up note (phone/email/note) attached to a specific visit;
+  // stored as correspondence so it renders as a ✉ block under that visit
+  window.openVetFollowup = (dog, eid, slot) => {
+    if (!slot) return;
+    if (slot.firstChild) { slot.innerHTML = ""; return; }        // toggle off
+    const inp = "font:inherit;font-size:14px;padding:5px 8px;border-radius:8px;border:1px solid var(--grid);background:var(--surface);color:var(--ink)";
+    slot.innerHTML =
+      `<div class="vcorr" style="margin-top:8px">` +
+      `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px">` +
+        `<input type="date" class="vfuDate" value="${localISO(today)}" style="${inp}width:150px">` +
+        `<select class="vfuChan" style="${inp}"><option value="phone">📞 phone</option><option value="email">✉ email</option><option value="note">📝 note</option></select></div>` +
+      `<textarea class="vfuText" rows="2" placeholder="e.g. Vet called — urinalysis normal, no infection" style="${inp}width:100%"></textarea>` +
+      `<div class="mgrp" style="display:flex;gap:6px;margin-top:6px"><button class="btn primary vfuSave">Save</button><button class="btn vfuCancel">Cancel</button></div></div>`;
+    slot.querySelector(".vfuCancel").onclick = () => { slot.innerHTML = ""; };
+    slot.querySelector(".vfuSave").onclick = async () => {
+      const text = slot.querySelector(".vfuText").value.trim();
+      if (!text) { flash("Write a note first"); return; }
+      try {
+        await post("/api/vet_followup", { dog, encounter_id: eid,
+          date: slot.querySelector(".vfuDate").value || null,
+          channel: slot.querySelector(".vfuChan").value, text });
+        flash("Saved — reloading…"); setTimeout(() => location.reload(), 700);
+      } catch (e) { flash("Failed: " + e.message, 4000); }
+    };
   };
 
   // upload a vet document (PDF/image): stored in vet_records/, linked from a new

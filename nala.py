@@ -663,8 +663,23 @@ def _gi_history(path):
             # phase had it intermittently, not every day, so don't smear it
             rec = {"lvl": lvl, "sev": _norm_sev(e.get("severity")),
                    "blood": lvl == "acute" and _blood_present(e.get("blood"))}
-            for k in span(e["date_onset"], e.get("date_resolved"), e.get("duration_days")):
+            solid = span(e["date_onset"], e.get("date_resolved"), e.get("duration_days"))
+            for k in solid:
                 days[k] = rec
+            # an uncertain, fading tail: known-abnormal ends at `solid`, but the phase
+            # resolved somewhere before fade_until (exact date unknown) — ramp opacity
+            # from ~1 down to ~0 across it so the chronic colour fades toward normal
+            fu = e.get("fade_until")
+            if lvl == "chronic" and fu and solid:
+                start = date.fromisoformat(solid[-1]) + timedelta(days=1)
+                stop = date.fromisoformat(fu)
+                tail = []
+                dd = start
+                while dd <= stop:
+                    tail.append(dd); dd += timedelta(days=1)
+                n = len(tail)
+                for i, dd in enumerate(tail, 1):
+                    days[dd.isoformat()] = {**rec, "fade": round(1 - i / (n + 1), 3)}
     for e in raw.get("episodes", []):
         if e.get("type") == "parasite_finding" and e.get("date"):
             days[e["date"]] = {"lvl": "parasite", "note": e.get("finding")}
@@ -729,8 +744,8 @@ def _corr_label(k):
 
 
 def _corr_entry(m):
-    """Shape a correspondence message for the dashboard: date, who, and the
-    extracted facts as label/text lines."""
+    """Shape a correspondence message for the dashboard: date, who, channel, and
+    the extracted facts (or a free-text note) as label/text lines."""
     facts = []
     ef = m.get("extracted_facts")
     if isinstance(ef, dict):
@@ -738,8 +753,13 @@ def _corr_entry(m):
             facts.append({"label": _corr_label(k), "text": _vet_val(v)})
     elif ef:
         facts.append({"label": "", "text": _vet_val(ef)})
-    who = " → ".join(x for x in (m.get("from"), m.get("to")) if x) or None
-    return {"date": m.get("date"), "who": who,
+    if not facts:                       # free-text follow-up note
+        for k in ("content_summary", "text", "note", "summary"):
+            if m.get(k):
+                facts.append({"label": "", "text": _vet_val(m[k])}); break
+    chan = m.get("channel")             # phone | email | note
+    who = chan or (" → ".join(x for x in (m.get("from"), m.get("to")) if x) or None)
+    return {"date": m.get("date"), "who": who, "channel": chan,
             "purpose": m.get("purpose"), "facts": facts}
 
 
@@ -1048,6 +1068,7 @@ def load_vet(cfg):
                 if id(m) not in seen:
                     cmsgs.append(m); seen.add(id(m))
             items.append({
+                "id": e.get("encounter_id"),
                 "date": e.get("date"),
                 "provider": e.get("provider"),
                 "type": e.get("type"),
@@ -1061,6 +1082,54 @@ def load_vet(cfg):
         if items:
             out[d] = items
     return out
+
+
+def load_vet_open(cfg):
+    """Per-dog 'open items': pending/missing results and open questions that live
+    in the records file but aren't tied to a single encounter — normally invisible."""
+    out = {}
+    for d in dog_names(cfg):
+        p = DATA / f"{d.lower()}_vet_records.json"
+        if not p.exists():
+            continue
+        try:
+            raw = json.loads(p.read_text())
+        except Exception:
+            continue
+        pending = []
+        for x in raw.get("pending_or_missing_results", []):
+            if isinstance(x, dict):
+                who = ", ".join(str(x[k]) for k in ("provider", "date") if x.get(k))
+                pending.append({"item": x.get("item") or _vet_val(x),
+                                "why": x.get("why"), "who": who or None,
+                                "priority": x.get("priority", 99)})
+            elif x:
+                pending.append({"item": str(x), "priority": 99})
+        pending.sort(key=lambda z: z.get("priority", 99))
+        questions = [q if isinstance(q, str) else _vet_val(q)
+                     for q in raw.get("open_questions", [])]
+        if pending or questions:
+            out[d] = {"pending": pending, "questions": questions}
+    return out
+
+
+def add_vet_followup(dog, encounter_id, text, date=None, channel="note"):
+    """Append a free-text follow-up note (phone/email/note), linked to a visit, to
+    the dog's correspondence so it renders under that visit. Returns the msg_id."""
+    if not (text or "").strip():
+        raise ValueError("empty follow-up note")
+    p = DATA / f"{dog.lower()}_vet_records.json"
+    data = json.loads(p.read_text()) if p.exists() else {}
+    d = date or datetime.now(tz()).date().isoformat()
+    msgs = data.setdefault("correspondence", {}).setdefault("messages", [])
+    n = sum(1 for m in msgs if str(m.get("msg_id", "")).startswith(f"corr_{d}_note"))
+    mid = f"corr_{d}_note{n + 1}"
+    msgs.append({"msg_id": mid, "date": d,
+                 "channel": channel if channel in ("phone", "email", "note") else "note",
+                 "relates_to_encounter": [encounter_id] if encounter_id else [],
+                 "text": text.strip(), "added_via": "dashboard follow-up"})
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    return mid
 
 
 def load_origins(cfg):
@@ -1125,6 +1194,7 @@ def build_payload(cfg, db):
         "meals": load(MEALS, {}),
         "gi": load_gi(cfg),
         "vet": load_vet(cfg),
+        "vet_open": load_vet_open(cfg),
         "origins": load_origins(cfg),
         "vax": load_vax(cfg),
         "meds": load_meds(cfg),
@@ -1286,6 +1356,11 @@ def cmd_serve(args):
                         body.get("date"), body.get("provider"),
                         body.get("type"), body.get("note"))
                     return self._send(200, json.dumps({"ok": True, "file": name}))
+                if self.path == "/api/vet_followup":
+                    mid = add_vet_followup(
+                        body["dog"], body.get("encounter_id"), body.get("text", ""),
+                        body.get("date"), body.get("channel", "note"))
+                    return self._send(200, json.dumps({"ok": True, "id": mid}))
             except urllib.error.HTTPError as e:
                 return self._send(502, json.dumps({"error": f"Strava API: {e.code}"}))
             except (KeyError, ValueError) as e:
