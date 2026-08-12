@@ -1022,7 +1022,7 @@ function renderPepperPlan(dog) {
     const done = we && today > we;
     const label = typeof w.week === "number"
       ? `Week ${w.week}${w.title ? " — " + esc(w.title) : ""}`
-      : esc(w.title || String(w.week));
+      : `${w.the_hike ? "🏔 " : ""}${esc(w.title || String(w.week))}`;
     let body;
     if (w.the_hike) {   // merged hike week: taper to baseline walks, then the summit
       body = `Easy baseline walks, then the traverse — <b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b>`;
@@ -1031,7 +1031,7 @@ function renderPepperPlan(dog) {
       if (m) sub.push(`Rocky loop ${rMi(m.mi)} mi / ${rFt(m.elev_ft)} ft`);
       if (l) sub.push(`Long hike ${rMi(l.mi)} mi / ${rFt(l.elev_ft)} ft`);
       body = `<b>Total: ${rMi(w.total.mi)} mi · ${rFt(w.total.elev_ft)} ft</b>` +
-             (sub.length ? `<div class="d" style="margin-top:2px">${sub.join(" · ")}</div>` : "");
+             (sub.length ? `<div class="d" style="margin-top:2px">${sub.join("<br>")}</div>` : "");
     } else body = "";
     return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}</div><div class="ph-n">${body}</div></li>`;
   }).join("");
