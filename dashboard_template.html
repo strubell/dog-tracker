@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nala's Comeback Plan</title>
+<title>Dog Log</title>
 <style>
   :root {
     --page:       #f9f9f7;
@@ -1005,40 +1005,35 @@ function renderElevHeatmap(dog) {
 function renderPepperPlan(dog) {
   const plan = planFor(dog);
   if (!plan) return;
-  document.getElementById("planHeadingP").textContent = "The plan — Vermont traverse";
+  document.getElementById("planHeadingP").textContent = "Project Peak Pepper";
   const range = s => {
     if (!s) return [null, null];
     const [a, b] = s.split("/");
     return [a ? new Date(a + "T00:00:00") : null, b ? new Date(b + "T00:00:00") : null];
   };
-  const sh = d => d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
-  const isEventWk = w => String(w.week).toUpperCase() === "EVENT";
-  const cur = planWeekNow(dog);   // current plan week, for highlighting (progress now lives up top)
+  const cur = planWeekNow(dog);   // current plan week, for highlighting (progress lives up top)
   const rMi = a => Array.isArray(a) ? `${a[0]}–${a[1]}` : `${a}`;
   const rFt = a => Array.isArray(a) ? `${a[0].toLocaleString()}–${a[1].toLocaleString()}` : `${(+a).toLocaleString()}`;
 
-  // ---- the weekly schedule ----
+  // ---- the weekly schedule (Nala-style: theme in the title, targets in the body) ----
   document.getElementById("pepperWeeks").innerHTML = plan.weeks.map(w => {
-    const [ws, we] = range(w.dates);
+    const [, we] = range(w.dates);
     const now = cur && cur.w === w;
     const done = we && today > we;
-    const label = isEventWk(w) ? "🏔 Event" : (typeof w.week === "number" ? `Week ${w.week}` : esc(String(w.week)));
-    const rng = w.dates ? (isEventWk(w) ? sh(ws) : `${sh(ws)}–${sh(we)}`) : "";
-    const tag = w.test ? ` <span class="ph-tag">test hike</span>` : "";
+    const label = typeof w.week === "number"
+      ? `Week ${w.week}${w.title ? " — " + esc(w.title) : ""}`
+      : esc(w.title || String(w.week));
     let body;
-    if (isEventWk(w) && w.the_hike) {
-      body = `<b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b> — the traverse`;
+    if (w.the_hike) {   // merged hike week: taper to baseline walks, then the summit
+      body = `Easy baseline walks, then the traverse — <b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b>`;
     } else if (w.total) {
       const m = w.midweek, l = w.long, sub = [];
       if (m) sub.push(`Rocky loop ${rMi(m.mi)} mi / ${rFt(m.elev_ft)} ft`);
       if (l) sub.push(`Long hike ${rMi(l.mi)} mi / ${rFt(l.elev_ft)} ft`);
       body = `<b>Total: ${rMi(w.total.mi)} mi · ${rFt(w.total.elev_ft)} ft</b>` +
-             (sub.length ? `<div class="d" style="margin-top:2px">${sub.join(" · ")}</div>` : "") +
-             (w.note ? `<div class="d" style="margin-top:3px">${esc(w.note)}</div>` : "");
-    } else {
-      body = w.note ? `<span class="d">${esc(w.note)}</span>` : "";
-    }
-    return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}${rng ? ` <span class="d">· ${rng}</span>` : ""}${tag}</div><div class="ph-n">${body}</div></li>`;
+             (sub.length ? `<div class="d" style="margin-top:2px">${sub.join(" · ")}</div>` : "");
+    } else body = "";
+    return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}</div><div class="ph-n">${body}</div></li>`;
   }).join("");
 }
 
@@ -1154,7 +1149,7 @@ function renderPepperPlan(dog) {
 }
 
 // ---- phases ----------------------------------------------------------------------
-document.getElementById("planHeading").textContent = `The ${planWeeks}-week plan`;
+document.getElementById("planHeading").textContent = `${cfg.dog}'s Comeback Plan`;
 document.getElementById("phases").innerHTML = cfg.phases.map(p => {
   const done = p.weeks[1] != null && planWeek > p.weeks[1];
   const now = phaseFor(planWeek) === p;
