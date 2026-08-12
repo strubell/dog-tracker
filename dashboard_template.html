@@ -408,7 +408,7 @@
     </div>
     <div class="card" id="planCardP">
       <h2 id="planHeadingP">The plan</h2>
-      <div class="sub" id="planSubP">Building toward the traverse — a midweek hills session and a Saturday long hike each week.</div>
+      <div class="sub" id="planSubP">Building toward the traverse — a midweek rocky loop and a weekend long hike each week.</div>
       <ol class="phases" id="pepperWeeks"></ol>
     </div>
   </div>
@@ -517,14 +517,13 @@ function planWeekNow(dog) {
   const [ws, we] = rng(plan.weeks[0].dates);
   return { w: plan.weeks[0], ws, we };
 }
-// distance + elevation targets for one plan week (baseline walks + the two build sessions)
+// a plan week's weekly-TOTAL goal as [lo,hi] ranges (miles + elevation ft), or null
 function planTargets(w) {
-  if (!w) return { mi: 0, elev: 0 };
-  if (String(w.week).toUpperCase() === "EVENT" && w.the_hike) return { mi: w.the_hike.mi, elev: w.the_hike.elev_ft };
-  const base = (String(w.nala_baseline_mi_week || "").match(/\d+(\.\d+)?/g) || []).map(parseFloat);
-  const baseMi = base.length ? base.reduce((a, b) => a + b, 0) / base.length : 0;
-  const h = w.add_wed_hills, l = w.add_sat_long;
-  return { mi: baseMi + (h && h.mi || 0) + (l && l.mi || 0), elev: (h && h.elev_ft || 0) + (l && l.elev_ft || 0) };
+  if (!w) return { mi: null, elev: null };
+  if (String(w.week).toUpperCase() === "EVENT" && w.the_hike)
+    return { mi: [w.the_hike.mi, w.the_hike.mi], elev: [w.the_hike.elev_ft, w.the_hike.elev_ft] };
+  if (w.total) return { mi: w.total.mi || null, elev: w.total.elev_ft || null };
+  return { mi: null, elev: null };   // rest / taper-to-event weeks
 }
 // unified weekly goals for the "this week's progress" chart:
 //   dog with a goal plan (Pepper) → distance + elevation targets for the current plan week
@@ -533,8 +532,8 @@ function planTargets(w) {
 function weeklyGoals(dog) {
   const pw = planWeekNow(dog);
   if (pw) {
-    const t = planTargets(pw.w);
-    return { dist: t.mi > 0 ? [t.mi, t.mi] : null, elev: t.elev > 0 ? t.elev : null,
+    const t = planTargets(pw.w);   // [lo,hi] ranges (or null for rest weeks)
+    return { dist: t.mi || null, elev: t.elev || null,
              weekStart: pw.ws, weekEnd: addDays(pw.we || pw.ws, 1), label: typeof pw.w.week === "number" ? `Week ${pw.w.week}` : String(pw.w.week) };
   }
   if (dog === cfg.dog) {
@@ -701,9 +700,9 @@ function renderCumulative(dog) {
   const agg = aggFor(dog);
   const gg = weeklyGoals(dog);
   const weekStart = thisMonday, weekEnd = addDays(thisMonday, 7);   // Monday-aligned for every dog
-  const distGoal = gg.dist ? gg.dist[1] : null;      // hit the top of the band
-  const elevGoal = gg.elev || null;
-  const dual = elevGoal != null;                     // show a second (elevation) axis
+  const distBand = gg.dist || null, elevBand = gg.elev || null;     // each a [lo,hi] range or null
+  const distHi = distBand ? distBand[1] : null, elevHi = elevBand ? elevBand[1] : null;
+  const dual = elevBand != null;                     // show a second (elevation) axis
   // collect this week's outings with mi + elevation (circles: baseline walk, ~0 elev)
   const incs = [];
   for (const a of agg.pets) {
@@ -725,9 +724,9 @@ function renderCumulative(dog) {
   const nowClamp = Math.min(Date.now(), x1);
   // per-metric vertical scale: if there's a goal, pin it to GOALY of the height (room to overshoot);
   // otherwise scale to the running total
-  const GOALY = 0.80;
-  const miMax = distGoal ? distGoal / GOALY : Math.max(6, Math.ceil(totMi + 0.5));
-  const elevMax = elevGoal ? elevGoal / GOALY : Math.max(500, Math.ceil((totElev + 100) / 100) * 100);
+  const GOALY = 0.80;                                 // top of each goal range sits here
+  const miMax = distHi ? distHi / GOALY : Math.max(6, Math.ceil(totMi + 0.5));
+  const elevMax = elevHi ? elevHi / GOALY : Math.max(500, Math.ceil((totElev + 100) / 100) * 100);
   const Ymi = v => T + plotH * (1 - v / miMax);
   const Yel = v => T + plotH * (1 - v / elevMax);
   const cMi = "var(--series)", cEl = "var(--series-2)";
@@ -744,13 +743,15 @@ function renderCumulative(dog) {
     for (let v = 0; v <= elevMax + 0.001; v += elStep)
       s += `<text x="${W - R + 6}" y="${Yel(v) + 4}" text-anchor="start" fill="${cEl}">${v >= 1000 ? (v / 1000) + "k" : v}</text>`;
   }
-  // shared goal line (each metric's goal sits at the same height), or a distance-only band
-  if (distGoal && dual) {
-    s += `<line x1="${L}" x2="${W - R}" y1="${Ymi(distGoal)}" y2="${Ymi(distGoal)}" stroke="var(--axis)" stroke-dasharray="4 3"/>` +
-         `<text x="${L + 4}" y="${Ymi(distGoal) - 4}" text-anchor="start">weekly goal · ${(+distGoal).toFixed(distGoal % 1 ? 1 : 0)} mi / ${elevGoal.toLocaleString()} ft</text>`;
-  } else if (gg.dist) {
-    s += `<rect x="${L}" y="${Ymi(gg.dist[1])}" width="${plotW}" height="${Ymi(gg.dist[0]) - Ymi(gg.dist[1])}" fill="var(--band)"/>` +
-         `<text x="${L + 4}" y="${Ymi(gg.dist[1]) - 4}" text-anchor="start">weekly goal ${gg.dist[0]}–${gg.dist[1]} mi</text>`;
+  // weekly-goal RANGE shown as a shaded band per metric (like Nala's mile band)
+  const rr = a => `${(+a[0]).toLocaleString()}–${(+a[1]).toLocaleString()}`;
+  if (dual) {
+    s += `<rect x="${L}" y="${Ymi(distBand[1])}" width="${plotW}" height="${Ymi(distBand[0]) - Ymi(distBand[1])}" fill="${cMi}" opacity="0.12"/>` +
+         `<rect x="${L}" y="${Yel(elevBand[1])}" width="${plotW}" height="${Yel(elevBand[0]) - Yel(elevBand[1])}" fill="${cEl}" opacity="0.12"/>` +
+         `<text x="${L + 4}" y="${Ymi(distBand[1]) - 4}" text-anchor="start">weekly goal · ${rr(distBand)} mi / ${rr(elevBand)} ft</text>`;
+  } else if (distBand) {
+    s += `<rect x="${L}" y="${Ymi(distBand[1])}" width="${plotW}" height="${Ymi(distBand[0]) - Ymi(distBand[1])}" fill="var(--band)"/>` +
+         `<text x="${L + 4}" y="${Ymi(distBand[1]) - 4}" text-anchor="start">weekly goal ${rr(distBand)} mi</text>`;
   }
   // day gridlines + weekday labels (derived from the actual week start)
   for (let i = 0; i < 7; i++) {
@@ -801,10 +802,10 @@ function renderCumulative(dog) {
     : "";
   // caption
   const parts = [`${totMi.toFixed(1)} mi` + (dual ? ` / ${Math.round(totElev).toLocaleString()} ft` : "") + " so far"];
-  if (distGoal) {
-    const dgot = totMi >= distGoal, egot = !dual || totElev >= elevGoal;
-    parts.push(dgot && egot ? "weekly goal met ✓"
-      : `goal ${dual ? `${(+distGoal).toFixed(distGoal % 1 ? 1 : 0)} mi / ${elevGoal.toLocaleString()} ft` : `${gg.dist[0]}–${gg.dist[1]} mi`}`);
+  if (distBand) {   // met = into the low end of the range for every tracked metric
+    const met = totMi >= distBand[0] && (!dual || totElev >= elevBand[0]);
+    parts.push(met ? "weekly goal met ✓"
+      : `goal ${rr(distBand)} mi${dual ? ` / ${rr(elevBand)} ft` : ""}`);
   }
   document.getElementById("cumSub").textContent = parts.join(" · ");
 }
@@ -1003,8 +1004,9 @@ function renderPepperPlan(dog) {
   };
   const sh = d => d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
   const isEventWk = w => String(w.week).toUpperCase() === "EVENT";
-  const isTestWk = w => !!(w.add_sat_long && w.add_sat_long.flag);   // the dress-rehearsal week
   const cur = planWeekNow(dog);   // current plan week, for highlighting (progress now lives up top)
+  const rMi = a => Array.isArray(a) ? `${a[0]}–${a[1]}` : `${a}`;
+  const rFt = a => Array.isArray(a) ? `${a[0].toLocaleString()}–${a[1].toLocaleString()}` : `${(+a).toLocaleString()}`;
 
   // ---- the weekly schedule ----
   document.getElementById("pepperWeeks").innerHTML = plan.weeks.map(w => {
@@ -1013,16 +1015,19 @@ function renderPepperPlan(dog) {
     const done = we && today > we;
     const label = isEventWk(w) ? "🏔 Event" : (typeof w.week === "number" ? `Week ${w.week}` : esc(String(w.week)));
     const rng = w.dates ? (isEventWk(w) ? sh(ws) : `${sh(ws)}–${sh(we)}`) : "";
-    const tag = isTestWk(w) ? ` <span class="ph-tag">test hike</span>` : "";
+    const tag = w.test ? ` <span class="ph-tag">test hike</span>` : "";
     let body;
     if (isEventWk(w) && w.the_hike) {
       body = `<b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b> — the traverse`;
+    } else if (w.total) {
+      const m = w.midweek, l = w.long, sub = [];
+      if (m) sub.push(`Rocky loop ${rMi(m.mi)} mi / ${rFt(m.elev_ft)} ft`);
+      if (l) sub.push(`Long hike ${rMi(l.mi)} mi / ${rFt(l.elev_ft)} ft`);
+      body = `<b>Total: ${rMi(w.total.mi)} mi · ${rFt(w.total.elev_ft)} ft</b>` +
+             (sub.length ? `<div class="d" style="margin-top:2px">${sub.join(" · ")}</div>` : "") +
+             (w.note ? `<div class="d" style="margin-top:3px">${esc(w.note)}</div>` : "");
     } else {
-      const h = w.add_wed_hills, l = w.add_sat_long, parts = [];
-      if (h) parts.push(`<b>Wed hills:</b> ${h.mi} mi / ${h.elev_ft.toLocaleString()} ft${h.note ? ` <span class="d">(${esc(h.note)})</span>` : ""}`);
-      if (l) parts.push(`<b>Sat long:</b> ${l.mi} mi / ${l.elev_ft.toLocaleString()} ft${l.terrain ? ` <span class="d">(${esc(l.terrain)})</span>` : ""}`);
-      if (!h && !l && w.note) parts.push(esc(w.note));
-      body = parts.join("<br>");
+      body = w.note ? `<span class="d">${esc(w.note)}</span>` : "";
     }
     return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}${rng ? ` <span class="d">· ${rng}</span>` : ""}${tag}</div><div class="ph-n">${body}</div></li>`;
   }).join("");
