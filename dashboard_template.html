@@ -700,7 +700,7 @@ function roundedTop(x, y, w, h, r) {
 function renderCumulative(dog) {
   const agg = aggFor(dog);
   const gg = weeklyGoals(dog);
-  const weekStart = gg.weekStart, weekEnd = gg.weekEnd;
+  const weekStart = thisMonday, weekEnd = addDays(thisMonday, 7);   // Monday-aligned for every dog
   const distGoal = gg.dist ? gg.dist[1] : null;      // hit the top of the band
   const elevGoal = gg.elev || null;
   const dual = elevGoal != null;                     // show a second (elevation) axis
@@ -778,9 +778,11 @@ function renderCumulative(dog) {
       out += `<circle cx="${d.x}" cy="${d.y}" r="3.5" fill="${color}" stroke="var(--surface)" stroke-width="1.5" data-tip="${esc(t)}"/>`;
     }
     if (incs.length) {
-      const ex = X(nowClamp), ey = Y(cum), lx = Math.min(ex + 8, W - R - 46);
-      out += `<circle cx="${ex}" cy="${ey}" r="4.5" fill="${color}" stroke="var(--surface)" stroke-width="2"/>` +
-             `<text x="${lx}" y="${ey - 8}" font-weight="600" fill="${color}">${key === "mi" ? cum.toFixed(1) + " mi" : Math.round(cum).toLocaleString() + " ft"}</text>`;
+      const ex = X(nowClamp), ey = Y(cum);
+      out += `<circle cx="${ex}" cy="${ey}" r="4.5" fill="${color}" stroke="var(--surface)" stroke-width="2"/>`;
+      // single-metric: label the end dot on the chart. dual-metric: skip it (the two
+      // near-zero labels overlap early in the week) — the caption already shows both totals.
+      if (!dual) out += `<text x="${Math.min(ex + 8, W - R - 46)}" y="${ey - 8}" font-weight="600" fill="${color}">${key === "mi" ? cum.toFixed(1) + " mi" : Math.round(cum).toLocaleString() + " ft"}</text>`;
     }
     return out;
   };
