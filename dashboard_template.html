@@ -177,19 +177,17 @@
   ol.phases li.done .ph-t::after { content: " ✓"; color: var(--good); }
   ol.phases .ph-n { font-size: 13px; color: var(--ink-2); }
   ol.phases li.done .ph-n { color: var(--ink-muted); }
-  ol.phases .ph-flag { margin-top: 4px; font-size: 12px; color: var(--warn); font-weight: 600; }
-  .goalbox { padding: 10px 12px; border-radius: 8px; background: var(--series-wash);
-    border: 1px solid var(--border); margin-bottom: 12px; }
-  .goal-h { font-weight: 700; font-size: 15px; }
-  .goal-meta { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
-  .goal-route { font-size: 12px; color: var(--ink-muted); margin-top: 5px; }
-  .goal-notes { margin-top: 6px; font-size: 12px; color: var(--ink-muted); }
-  .goal-notes > summary { cursor: pointer; color: var(--series); list-style: none; }
-  .goal-notes > summary::-webkit-details-marker { display: none; }
-  .goal-notes > summary::before { content: "▸ "; }
-  .goal-notes[open] > summary::before { content: "▾ "; }
-  ul.mini { margin: 6px 0 2px 0; padding-left: 18px; }
-  ul.mini li { margin: 3px 0; }
+  ol.phases .ph-tag { font-size: 11px; font-weight: 600; color: var(--ink-muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+  /* this week's progress: actual vs target bars */
+  .wkprog { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--grid); }
+  .wkprog-h { font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+  .pbar-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 12px; }
+  .pbar-lbl { width: 62px; color: var(--ink-2); }
+  .pbar { flex: 1; height: 8px; background: var(--band); border-radius: 999px; overflow: hidden; }
+  .pbar-fill { height: 100%; background: var(--series); border-radius: 999px; transition: width .2s; }
+  .pbar-fill.met { background: var(--good); }
+  .pbar-val { width: 116px; text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
   ul.notes { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   ul.notes li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
@@ -409,10 +407,9 @@
     </div>
     <div class="card" id="planCardP">
       <h2 id="planHeadingP">The plan</h2>
-      <div class="sub" id="planSubP">Elevation is the target — Nala's daily walks are her aerobic base, plus a midweek hills session and a Saturday long hike.</div>
-      <div id="pepperGoal"></div>
+      <div class="sub" id="planSubP">Building toward the traverse — a midweek hills session and a Saturday long hike each week.</div>
+      <div id="pepperProgress"></div>
       <ol class="phases" id="pepperWeeks"></ol>
-      <div id="pepperExtra"></div>
     </div>
   </div>
 
@@ -925,32 +922,65 @@ function renderElevHeatmap(dog) {
 function renderPepperPlan(dog) {
   const plan = planFor(dog);
   if (!plan) return;
-  const g = plan.goal || {};
-  const evt = g.date ? new Date(g.date + "T00:00:00") : null;
-  const daysToGo = evt ? Math.round((evt - today) / WEEK * 7) : null;
   document.getElementById("planHeadingP").textContent = "The plan — Vermont traverse";
-  const cd = daysToGo == null ? "" : daysToGo > 0 ? `<b>${daysToGo} days out</b>` : daysToGo === 0 ? "<b>today! 🏔</b>" : "<b>done</b>";
-  document.getElementById("pepperGoal").innerHTML =
-    `<div class="goalbox"><div class="goal-h">🎯 ${esc(g.event || "")}</div>` +
-    `<div class="goal-meta">${evt ? evt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""}` +
-    `${cd ? " · " + cd : ""}${g.distance_mi ? ` · ${g.distance_mi} mi` : ""}${g.elevation_gain_ft ? ` · ${g.elevation_gain_ft.toLocaleString()} ft` : ""}</div>` +
-    `${g.route ? `<div class="goal-route">${esc(g.route)}</div>` : ""}` +
-    `${g.profile_notes ? `<details class="goal-notes"><summary>Route notes</summary>${esc(g.profile_notes)}</details>` : ""}</div>`;
   const range = s => {
     if (!s) return [null, null];
     const [a, b] = s.split("/");
     return [a ? new Date(a + "T00:00:00") : null, b ? new Date(b + "T00:00:00") : null];
   };
   const sh = d => d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  const isEventWk = w => String(w.week).toUpperCase() === "EVENT";
+  const isTestWk = w => !!(w.add_sat_long && w.add_sat_long.flag);   // the dress-rehearsal week
+  const targets = w => {
+    if (isEventWk(w) && w.the_hike) return { mi: w.the_hike.mi, elev: w.the_hike.elev_ft };
+    const h = w.add_wed_hills, l = w.add_sat_long;
+    return { mi: (h && h.mi || 0) + (l && l.mi || 0), elev: (h && h.elev_ft || 0) + (l && l.elev_ft || 0) };
+  };
+
+  // ---- this week's progress: actual (logged outings) vs target (hills + long) ----
+  const bd = aggFor(dog).byDay;
+  let cur = null, lastPast = null;
+  for (const w of plan.weeks) {
+    const [ws, we] = range(w.dates);
+    if (ws && today >= ws && (!we || today <= we)) { cur = { w, ws, we }; break; }
+    if (ws && today >= ws) lastPast = { w, ws, we };
+  }
+  cur = cur || lastPast || { w: plan.weeks[0], ...(() => { const [ws, we] = range(plan.weeks[0].dates); return { ws, we }; })() };
+  let ami = 0, ae = 0;
+  const stop = cur.we || cur.ws;
+  for (let d = new Date(cur.ws); d <= stop; d = addDays(d, 1)) {
+    const r = bd[localISO(d)]; if (r) { ami += r.mi; ae += r.elev; }
+  }
+  const tgt = targets(cur.w);
+  const wkLabel = isEventWk(cur.w) ? "Event" : (typeof cur.w.week === "number" ? `Week ${cur.w.week}` : cur.w.week);
+  const wkRng = cur.we ? `${sh(cur.ws)}–${sh(cur.we)}` : sh(cur.ws);
+  const bar = (label, actual, target, unit) => {
+    const pct = target > 0 ? Math.min(100, Math.round(actual / target * 100)) : 0;
+    const met = target > 0 && actual >= target - 1e-9;
+    const val = unit === "mi"
+      ? `${actual.toFixed(1)} / ${target.toFixed(1)} mi`
+      : `${Math.round(actual).toLocaleString()} / ${target.toLocaleString()} ft`;
+    return `<div class="pbar-row"><span class="pbar-lbl">${label}</span>` +
+           `<div class="pbar"><div class="pbar-fill${met ? " met" : ""}" style="width:${pct}%"></div></div>` +
+           `<span class="pbar-val">${val}</span></div>`;
+  };
+  document.getElementById("pepperProgress").innerHTML =
+    `<div class="wkprog"><div class="wkprog-h">This week — ${esc(String(wkLabel))} <span class="d">· ${wkRng}</span></div>` +
+    ((tgt.mi || tgt.elev)
+      ? bar("Distance", ami, tgt.mi, "mi") + bar("Elevation", ae, tgt.elev, "ft")
+      : `<div class="d">Rest week — easy walks only.</div>`) +
+    `</div>`;
+
+  // ---- the weekly schedule (cleaned up) ----
   document.getElementById("pepperWeeks").innerHTML = plan.weeks.map(w => {
     const [ws, we] = range(w.dates);
-    const now = ws && we && today >= ws && today <= we;
+    const now = ws && today >= ws && (!we || today <= we) && cur.w === w;
     const done = we && today > we;
-    const isEvent = String(w.week).toUpperCase() === "EVENT";
-    const label = isEvent ? "🏔 Event" : (typeof w.week === "number" ? `Week ${w.week}` : esc(String(w.week)));
-    const rng = w.dates ? (isEvent ? sh(ws) : `${sh(ws)}–${sh(we)}`) : "";
-    let body, flag = "";
-    if (isEvent && w.the_hike) {
+    const label = isEventWk(w) ? "🏔 Event" : (typeof w.week === "number" ? `Week ${w.week}` : esc(String(w.week)));
+    const rng = w.dates ? (isEventWk(w) ? sh(ws) : `${sh(ws)}–${sh(we)}`) : "";
+    const tag = isTestWk(w) ? ` <span class="ph-tag">test hike</span>` : "";
+    let body;
+    if (isEventWk(w) && w.the_hike) {
       body = `<b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b> — the traverse`;
     } else {
       const h = w.add_wed_hills, l = w.add_sat_long, parts = [];
@@ -958,18 +988,9 @@ function renderPepperPlan(dog) {
       if (l) parts.push(`<b>Sat long:</b> ${l.mi} mi / ${l.elev_ft.toLocaleString()} ft${l.terrain ? ` <span class="d">(${esc(l.terrain)})</span>` : ""}`);
       if (!h && !l && w.note) parts.push(esc(w.note));
       body = parts.join("<br>");
-      if (w.nala_baseline_mi_week) body += `<div class="d" style="margin-top:3px">base: ${esc(String(w.nala_baseline_mi_week))} mi/wk of Nala's walks</div>`;
-      if (l && l.flag) flag = `<div class="ph-flag">⚑ ${esc(l.flag)}</div>`;
     }
-    return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}${rng ? ` <span class="d">· ${rng}</span>` : ""}</div><div class="ph-n">${body}${flag}</div></li>`;
+    return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}${rng ? ` <span class="d">· ${rng}</span>` : ""}${tag}</div><div class="ph-n">${body}</div></li>`;
   }).join("");
-  const st = plan.structure || {};
-  let extra = "";
-  if (st.recovery_rules && st.recovery_rules.length)
-    extra += `<details class="goal-notes"><summary>Rules of the build</summary><ul class="mini">${st.recovery_rules.map(r => `<li>${esc(r)}</li>`).join("")}</ul></details>`;
-  if (plan.prechecks && plan.prechecks.length)
-    extra += `<details class="goal-notes"><summary>Pre-checks</summary><ul class="mini">${plan.prechecks.map(r => `<li>${esc(r)}</li>`).join("")}</ul></details>`;
-  document.getElementById("pepperExtra").innerHTML = extra;
 }
 
 // ---- weight charts --------------------------------------------------------------
