@@ -14,6 +14,10 @@
     --series:     #2a78d6;
     --series-2:   #1baf7a;
     --series-wash:rgba(42,120,214,0.10);
+    /* exercise-tracking color vocab — one meaning per colour, used across every activity chart */
+    --ex-dist:    #2a78d6;   /* distance · miles · walks & hikes */
+    --ex-elev:    #1baf7a;   /* elevation gain */
+    --ex-run:     #e8843a;   /* runs */
     --band:       #f0efec;
     --good:       #006300;
     --warn:       #fab219;
@@ -37,6 +41,9 @@
       --series:     #3987e5;
       --series-2:   #199e70;
       --series-wash:rgba(57,135,229,0.14);
+      --ex-dist:    #3987e5;
+      --ex-elev:    #199e70;
+      --ex-run:     #f0965a;
       --band:       #262624;
       --good:       #0ca30c;
       --warn:       #fab219;
@@ -729,7 +736,7 @@ function renderCumulative(dog) {
   const elevMax = elevHi ? elevHi / GOALY : Math.max(500, Math.ceil((totElev + 100) / 100) * 100);
   const Ymi = v => T + plotH * (1 - v / miMax);
   const Yel = v => T + plotH * (1 - v / elevMax);
-  const cMi = "var(--series)", cEl = "var(--series-2)";
+  const cMi = "var(--ex-dist)", cEl = "var(--ex-elev)";
 
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:640px" role="img" aria-label="This week's progress">`;
   // left axis (miles) ticks
@@ -851,11 +858,11 @@ function renderWeekly(dog) {
       s += `<g data-tip="${esc(t)}">`;
       if (w.walkMi > 0)
         s += w.runMi > 0.05
-          ? `<rect x="${x}" y="${yMid}" width="${barW}" height="${base - yMid}" fill="var(--series)"/>`
-          : `<path d="${roundedTop(x, yMid, barW, base - yMid, 4)}" fill="var(--series)"/>`;
+          ? `<rect x="${x}" y="${yMid}" width="${barW}" height="${base - yMid}" fill="var(--ex-dist)"/>`
+          : `<path d="${roundedTop(x, yMid, barW, base - yMid, 4)}" fill="var(--ex-dist)"/>`;
       if (w.runMi > 0.05) {
         const segH = Math.max(1, (yMid - yTop) - (w.walkMi > 0 ? 2 : 0));  // 2px surface gap
-        s += `<path d="${roundedTop(x, yTop, barW, segH, 4)}" fill="var(--series-2)"/>`;
+        s += `<path d="${roundedTop(x, yTop, barW, segH, 4)}" fill="var(--ex-run)"/>`;
       }
       s += `</g>`;
     }
@@ -864,8 +871,8 @@ function renderWeekly(dog) {
   const el = document.getElementById("weeklyChart");
   el.innerHTML = s; bindTips(el);
   document.getElementById("weeklyLegend").innerHTML =
-    `<span class="sw" style="background:var(--series)"></span><span>Walk / hike</span>` +
-    `<span class="sw" style="background:var(--series-2)"></span><span>Run</span>`;
+    `<span class="sw" style="background:var(--ex-dist)"></span><span>Walk / hike</span>` +
+    `<span class="sw" style="background:var(--ex-run)"></span><span>Run</span>`;
   document.getElementById("weeklyTable").innerHTML =
     `<table><tr><th>Week of</th><th class="num">Walk/hike mi</th><th class="num">Run mi</th><th class="num">Total</th><th class="num">Time</th><th class="num">Days out</th></tr>` +
     weeks.filter(w => w.mi > 0 || +w.mon >= +planStart).map(w =>
@@ -955,8 +962,9 @@ function renderElevHeatmap(dog) {
   const weeks = Math.max(1, Math.round((lastMon - firstMon) / WEEK) + 1);
   const cell = 26, gap = 2, top = 22, left = 56;
   const Wd = left + 7 * (cell + gap) + 90, Hd = top + weeks * (cell + gap) + 6;
-  const steps = [0, 150, 400, 900, 1600, 2500];   // elevation ft/day → ramp buckets
-  const rampFor = e => { if (e <= 0) return null; let i = 1; while (i < steps.length && e >= steps[i]) i++; return `var(--ramp-${i})`; };
+  const steps = [0, 150, 400, 900, 1600, 2500];   // elevation ft/day → opacity buckets
+  const OPS = [0.2, 0.4, 0.6, 0.8, 1];            // green (elevation) ramp via opacity
+  const opFor = e => { if (e <= 0) return 0; let i = 1; while (i < steps.length && e >= steps[i]) i++; return OPS[Math.min(i, 5) - 1]; };
   let s = `<svg viewBox="0 0 ${Wd} ${Hd}" width="${Wd}" role="img" aria-label="Daily elevation with ${esc(dog)}">`;
   "MTWTFSS".split("").forEach((c, i) =>
     s += `<text x="${left + i * (cell + gap) + cell / 2}" y="${top - 8}" text-anchor="middle">${c}</text>`);
@@ -966,7 +974,7 @@ function renderElevHeatmap(dog) {
     s += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${isW1 || isEvt ? "lbl" : ""}" ${isW1 || isEvt ? 'font-weight="600"' : ""}>${fmtDay(mon)}</text>`;
     for (let i = 0; i < 7; i++) {
       const d = addDays(mon, i), k = localISO(d), rec = bd[k], x = left + i * (cell + gap);
-      const future = d > today, fill = rec ? rampFor(rec.elev) : null;
+      const future = d > today, op = rec ? opFor(rec.elev) : 0;
       let attrs = "";
       if (!future) {
         const t = rec
@@ -975,7 +983,8 @@ function renderElevHeatmap(dog) {
         attrs = ` data-tip="${esc(t)}"`;
       }
       s += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4"` +
-           ` fill="${fill ?? "var(--surface)"}" stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}"` +
+           ` fill="${op ? "var(--ex-elev)" : "var(--surface)"}"${op ? ` fill-opacity="${op}"` : ""}` +
+           ` stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}"` +
            ` stroke-width="${+d === +today ? 1.5 : 1}"${future ? ' opacity="0.35"' : ""}${attrs}/>`;
     }
     if (isW1) s += `<text x="${left + 7 * (cell + gap) + 8}" y="${yr + cell / 2 + 4}" class="lbl">wk 1</text>`;
@@ -985,7 +994,7 @@ function renderElevHeatmap(dog) {
   const el = document.getElementById("heatmapP"); el.innerHTML = s; bindTips(el);
   document.getElementById("heatLegendP").innerHTML =
     `<span>elev/day:</span><span class="sw" style="background:var(--surface)"></span><span>0</span>` +
-    steps.slice(1).map((v, i) => `<span class="sw" style="background:var(--ramp-${i + 1})"></span><span>${v}${i === steps.length - 2 ? "+" : ""} ft</span>`).join("");
+    steps.slice(1).map((v, i) => `<span class="sw" style="background:var(--ex-elev);opacity:${OPS[i]}"></span><span>${v}${i === steps.length - 2 ? "+" : ""} ft</span>`).join("");
   const dd = Object.keys(bd).sort().reverse().slice(0, 21);
   document.getElementById("heatTableP").innerHTML =
     `<table><tr><th>Date</th><th class="num">Elev ft</th><th class="num">Miles</th><th>Outings</th></tr>` +
