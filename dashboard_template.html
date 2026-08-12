@@ -931,10 +931,18 @@ function renderPepperPlan(dog) {
   const sh = d => d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
   const isEventWk = w => String(w.week).toUpperCase() === "EVENT";
   const isTestWk = w => !!(w.add_sat_long && w.add_sat_long.flag);   // the dress-rehearsal week
+  const baselineMi = w => {                        // midpoint of "7-8" style baseline range
+    const nums = String(w.nala_baseline_mi_week || "").match(/\d+(\.\d+)?/g);
+    if (!nums) return 0;
+    return nums.reduce((a, b) => a + parseFloat(b), 0) / nums.length;
+  };
   const targets = w => {
     if (isEventWk(w) && w.the_hike) return { mi: w.the_hike.mi, elev: w.the_hike.elev_ft };
     const h = w.add_wed_hills, l = w.add_sat_long;
-    return { mi: (h && h.mi || 0) + (l && l.mi || 0), elev: (h && h.elev_ft || 0) + (l && l.elev_ft || 0) };
+    // distance target = baseline walks (Nala's daily walks she also does) + the two build sessions;
+    // elevation target = the build sessions (baseline walks are ~flat)
+    return { mi: baselineMi(w) + (h && h.mi || 0) + (l && l.mi || 0),
+             elev: (h && h.elev_ft || 0) + (l && l.elev_ft || 0) };
   };
 
   // ---- this week's progress: actual (logged outings) vs target (hills + long) ----
@@ -1308,10 +1316,9 @@ function renderFood(dog) {
     return best;
   };
   const revAt = iso => revAtMeal(iso, MEAL_ORDER.length - 1);   // ration in effect by day's end
-  const foodMealK = rev => {
-    const kib = (rev.items || []).find(it => it.cups && it.kcal_per_cup);   // per-meal food
-    return kib ? kib.cups * kib.kcal_per_cup : 0;
-  };
+  const isMealFood = it => it.cups && it.kcal_per_cup;   // a per-meal, cup-measured food
+  const foodMealK = rev =>                                // sum of ALL per-meal foods (kibble + bland, etc.)
+    (rev.items || []).filter(isMealFood).reduce((t, it) => t + it.cups * it.kcal_per_cup, 0);
   const dayKcal = iso => {
     if (!revisions.length) return null;
     const log = meals[iso] || {};
@@ -1320,10 +1327,9 @@ function renderFood(dog) {
     MEAL_ORDER.forEach((m, i) => { if (log[m] !== false) food += foodMealK(revAtMeal(iso, i)); });
     // once-a-day extras (bone, powder, pills) come from the ration in effect at day's end
     const its = (revAt(iso).items || []);
-    const kib = its.find(it => it.cups && it.kcal_per_cup);
     const bone = its.find(it => /dental bone/i.test(it.item || ""));
     const boneK = (bone && log.dental !== false) ? (bone.kcal || 0) : 0;
-    const otherK = its.filter(it => it !== kib && it !== bone)  // powder, pill buddies — always given
+    const otherK = its.filter(it => !isMealFood(it) && it !== bone)  // powder, pill buddies — always given
       .reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? (it.cups || 0) * (it.kcal_per_cup || 0)), 0);
     return food + boneK + otherK;
   };
