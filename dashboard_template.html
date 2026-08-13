@@ -1028,7 +1028,7 @@ function renderPepperPlan(dog) {
       body = `Easy baseline walks, then the traverse — <b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b>`;
     } else if (w.total) {
       const m = w.midweek, l = w.long, sub = [];
-      if (m) sub.push(`Rocky loop ${rMi(m.mi)} mi / ${rFt(m.elev_ft)} ft`);
+      if (m) sub.push(`Midweek loop ${rMi(m.mi)} mi / ${rFt(m.elev_ft)} ft`);
       if (l) sub.push(`Long hike ${rMi(l.mi)} mi / ${rFt(l.elev_ft)} ft`);
       body = `<b>Total: ${rMi(w.total.mi)} mi · ${rFt(w.total.elev_ft)} ft</b>` +
              (sub.length ? `<div class="d" style="margin-top:2px">${sub.join("<br>")}</div>` : "");
