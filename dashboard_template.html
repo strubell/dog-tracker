@@ -757,16 +757,18 @@ function renderCumulative(dog) {
     for (const inc of incs) { const x = X(inc.t); path += ` L ${x} ${Y(cum)}`; cum += inc[key]; path += ` L ${x} ${Y(cum)}`; dots.push({ x, y: Y(cum), inc, cum }); }
     path += ` L ${X(nowClamp)} ${Y(cum)}`;
     s += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const exN = X(nowClamp);
     for (const d of dots) {
+      if (Math.abs(d.x - exN) < 12) continue;   // skip a near-now outing — the end dot covers it
       const v = key === "mi" ? `+${d.inc.mi.toFixed(2)} mi · ${d.cum.toFixed(1)} mi total`
                              : `+${Math.round(d.inc.elev)} ft · ${Math.round(d.cum).toLocaleString()} ft total`;
       const t = `<b>${new Date(d.inc.t).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>${esc(d.inc.label)}<br>${v}`;
       s += `<circle cx="${d.x}" cy="${d.y}" r="3.2" fill="${color}" stroke="var(--surface)" stroke-width="1.5" data-tip="${esc(t)}"/>`;
     }
     if (incs.length) {
-      // no separate end dot — the last outing's dot is the endpoint; just label the total
-      const ex = X(nowClamp), ey = Y(cum), val = key === "mi" ? cum.toFixed(1) + " mi" : Math.round(cum).toLocaleString() + " ft";
-      s += `<text x="${Math.min(ex + 9, W - R - 46)}" y="${ey + 4}" font-weight="600" fill="${color}">${val}</text>`;
+      const ey = Y(cum), val = key === "mi" ? cum.toFixed(1) + " mi" : Math.round(cum).toLocaleString() + " ft";
+      s += `<circle cx="${exN}" cy="${ey}" r="4.5" fill="${color}" stroke="var(--surface)" stroke-width="2" data-tip="${esc(`<b>This week so far</b>${val}`)}"/>` +
+           `<text x="${Math.min(exN + 9, W - R - 46)}" y="${ey + 4}" font-weight="600" fill="${color}">${val}</text>`;
     }
     return s + `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--axis)"/></svg>`;
   };
