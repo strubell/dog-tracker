@@ -708,8 +708,7 @@ function renderCumulative(dog) {
   const gg = weeklyGoals(dog);
   const weekStart = thisMonday, weekEnd = addDays(thisMonday, 7);   // Monday-aligned for every dog
   const distBand = gg.dist || null, elevBand = gg.elev || null;     // each a [lo,hi] range or null
-  const distHi = distBand ? distBand[1] : null, elevHi = elevBand ? elevBand[1] : null;
-  const dual = elevBand != null;                     // show a second (elevation) axis
+  const dual = elevBand != null;                     // distance + elevation → two stacked plots
   // collect this week's outings with mi + elevation (circles: baseline walk, ~0 elev)
   const incs = [];
   for (const a of agg.pets) {
@@ -723,96 +722,66 @@ function renderCumulative(dog) {
   incs.sort((a, b) => a.t - b.t);
   const totMi = incs.reduce((s, x) => s + x.mi, 0);
   const totElev = incs.reduce((s, x) => s + x.elev, 0);
-
-  const W = 940, H = 240, L = 40, R = dual ? 52 : 14, T = 14, B = 26;
-  const plotW = W - L - R, plotH = H - T - B;
-  const x0 = +weekStart, x1 = +weekEnd;
-  const X = t => L + plotW * (t - x0) / (x1 - x0);
-  const nowClamp = Math.min(Date.now(), x1);
-  // per-metric vertical scale: if there's a goal, pin it to GOALY of the height (room to overshoot);
-  // otherwise scale to the running total
-  const GOALY = 0.80;                                 // top of each goal range sits here
-  const miMax = distHi ? distHi / GOALY : Math.max(6, Math.ceil(totMi + 0.5));
-  const elevMax = elevHi ? elevHi / GOALY : Math.max(500, Math.ceil((totElev + 100) / 100) * 100);
-  const Ymi = v => T + plotH * (1 - v / miMax);
-  const Yel = v => T + plotH * (1 - v / elevMax);
+  const x0 = +weekStart, x1 = +weekEnd, nowClamp = Math.min(Date.now(), x1);
+  const rr = a => `${(+a[0]).toLocaleString()}–${(+a[1]).toLocaleString()}`;
   const cMi = "var(--ex-dist)", cEl = "var(--ex-elev)";
 
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:640px" role="img" aria-label="This week's progress">`;
-  // left axis (miles) ticks
-  const miStep = miMax > 12 ? 4 : 2;
-  for (let v = 0; v <= miMax + 0.001; v += miStep)
-    s += `<line x1="${L}" x2="${W - R}" y1="${Ymi(v)}" y2="${Ymi(v)}" stroke="var(--grid)"/>` +
-         `<text x="${L - 6}" y="${Ymi(v) + 4}" text-anchor="end" fill="${dual ? cMi : "currentColor"}">${v}</text>`;
-  // right axis (elevation) ticks
-  if (dual) {
-    const elStep = Math.max(200, Math.round(elevMax / 4 / 100) * 100);
-    for (let v = 0; v <= elevMax + 0.001; v += elStep)
-      s += `<text x="${W - R + 6}" y="${Yel(v) + 4}" text-anchor="start" fill="${cEl}">${v >= 1000 ? (v / 1000) + "k" : v}</text>`;
-  }
-  // weekly-goal RANGE shown as a shaded band per metric (like Nala's mile band)
-  const rr = a => `${(+a[0]).toLocaleString()}–${(+a[1]).toLocaleString()}`;
-  if (dual) {
-    s += `<rect x="${L}" y="${Ymi(distBand[1])}" width="${plotW}" height="${Ymi(distBand[0]) - Ymi(distBand[1])}" fill="${cMi}" opacity="0.12"/>` +
-         `<rect x="${L}" y="${Yel(elevBand[1])}" width="${plotW}" height="${Yel(elevBand[0]) - Yel(elevBand[1])}" fill="${cEl}" opacity="0.12"/>` +
-         `<text x="${L + 4}" y="${Ymi(distBand[1]) - 4}" text-anchor="start">weekly goal · ${rr(distBand)} mi / ${rr(elevBand)} ft</text>`;
-  } else if (distBand) {
-    s += `<rect x="${L}" y="${Ymi(distBand[1])}" width="${plotW}" height="${Ymi(distBand[0]) - Ymi(distBand[1])}" fill="var(--band)"/>` +
-         `<text x="${L + 4}" y="${Ymi(distBand[1]) - 4}" text-anchor="start">weekly goal ${rr(distBand)} mi</text>`;
-  }
-  // day gridlines + weekday labels (derived from the actual week start)
-  for (let i = 0; i < 7; i++) {
-    const d = addDays(weekStart, i), dx = X(+d);
-    s += `<line x1="${dx}" x2="${dx}" y1="${T}" y2="${T + plotH}" stroke="var(--grid)"/>` +
-         `<text x="${dx + plotW / 14}" y="${H - 8}" text-anchor="middle"` +
-         (localISO(d) === localISO(today) ? ' class="lbl" font-weight="600"' : "") +
-         `>${d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3)}</text>`;
-  }
-  // cumulative step line for one metric
-  const line = (key, Y, color) => {
-    let cum = 0, path = `M ${X(x0)} ${Y(0)}`;
-    const dots = [];
-    for (const inc of incs) {
-      const x = X(inc.t);
-      path += ` L ${x} ${Y(cum)}`; cum += inc[key]; path += ` L ${x} ${Y(cum)}`;
-      dots.push({ x, y: Y(cum), inc, cum });
+  // one self-contained cumulative chart for a single metric (miles or elevation)
+  const chart = (key, color, band, unit, title) => {
+    const W = 940, H = title ? 176 : 240, L = 40, R = 14, T = title ? 24 : 16, B = 24;
+    const plotW = W - L - R, plotH = H - T - B;
+    const X = t => L + plotW * (t - x0) / (x1 - x0);
+    const goalHi = band ? band[1] : null;
+    const total = key === "mi" ? totMi : totElev;
+    const yMax = goalHi ? goalHi / 0.80
+      : (key === "mi" ? Math.max(6, Math.ceil(total + 0.5)) : Math.max(500, Math.ceil((total + 100) / 100) * 100));
+    const Y = v => T + plotH * (1 - v / yMax);
+    const tick = v => key === "mi" ? v : (v >= 1000 ? v / 1000 + "k" : v);
+    const step = key === "mi" ? (yMax > 12 ? 4 : 2) : Math.max(200, Math.round(yMax / 3 / 100) * 100);
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:520px" role="img" aria-label="This week ${title || unit}">`;
+    if (title) s += `<text x="${L}" y="13" font-weight="600" fill="${color}">${title}</text>`;
+    for (let v = 0; v <= yMax + 0.001; v += step)
+      s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/>` +
+           `<text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${tick(v)}</text>`;
+    if (band)
+      s += `<rect x="${L}" y="${Y(band[1])}" width="${plotW}" height="${Y(band[0]) - Y(band[1])}" fill="${color}" opacity="0.13"/>` +
+           `<text x="${L + 4}" y="${Y(band[1]) - 4}" text-anchor="start">goal ${rr(band)} ${unit}</text>`;
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i), dx = X(+d);
+      s += `<line x1="${dx}" x2="${dx}" y1="${T}" y2="${T + plotH}" stroke="var(--grid)"/>` +
+           `<text x="${dx + plotW / 14}" y="${H - 8}" text-anchor="middle"` +
+           (localISO(d) === localISO(today) ? ' class="lbl" font-weight="600"' : "") +
+           `>${d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3)}</text>`;
     }
+    let cum = 0, path = `M ${X(x0)} ${Y(0)}`; const dots = [];
+    for (const inc of incs) { const x = X(inc.t); path += ` L ${x} ${Y(cum)}`; cum += inc[key]; path += ` L ${x} ${Y(cum)}`; dots.push({ x, y: Y(cum), inc, cum }); }
     path += ` L ${X(nowClamp)} ${Y(cum)}`;
-    let out = `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
     for (const d of dots) {
-      const val = key === "mi" ? `+${d.inc.mi.toFixed(2)} mi · ${d.cum.toFixed(1)} mi total`
-                               : `+${Math.round(d.inc.elev)} ft · ${Math.round(d.cum).toLocaleString()} ft total`;
-      const t = `<b>${new Date(d.inc.t).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>${esc(d.inc.label)}<br>${val}`;
-      out += `<circle cx="${d.x}" cy="${d.y}" r="3.5" fill="${color}" stroke="var(--surface)" stroke-width="1.5" data-tip="${esc(t)}"/>`;
+      const v = key === "mi" ? `+${d.inc.mi.toFixed(2)} mi · ${d.cum.toFixed(1)} mi total`
+                             : `+${Math.round(d.inc.elev)} ft · ${Math.round(d.cum).toLocaleString()} ft total`;
+      const t = `<b>${new Date(d.inc.t).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>${esc(d.inc.label)}<br>${v}`;
+      s += `<circle cx="${d.x}" cy="${d.y}" r="3.2" fill="${color}" stroke="var(--surface)" stroke-width="1.5" data-tip="${esc(t)}"/>`;
     }
     if (incs.length) {
-      const ex = X(nowClamp), ey = Y(cum);
-      const val = key === "mi" ? cum.toFixed(1) + " mi" : Math.round(cum).toLocaleString() + " ft";
-      out += `<circle cx="${ex}" cy="${ey}" r="4.5" fill="${color}" stroke="var(--surface)" stroke-width="2"/>` +
-             // label sits just to the right of the dot, vertically centered — the two
-             // metrics' dots are at different heights, so the labels clear each other
-             `<text x="${Math.min(ex + 9, W - R - 46)}" y="${ey + 4}" font-weight="600" fill="${color}">${val}</text>`;
+      const ex = X(nowClamp), ey = Y(cum), val = key === "mi" ? cum.toFixed(1) + " mi" : Math.round(cum).toLocaleString() + " ft";
+      s += `<circle cx="${ex}" cy="${ey}" r="4.5" fill="${color}" stroke="var(--surface)" stroke-width="2"/>` +
+           `<text x="${Math.min(ex + 9, W - R - 46)}" y="${ey + 4}" font-weight="600" fill="${color}">${val}</text>`;
     }
-    return out;
+    return s + `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--axis)"/></svg>`;
   };
-  if (dual) s += line("elev", Yel, cEl);   // elevation behind
-  s += line("mi", Ymi, cMi);
-  s += `<line x1="${L}" x2="${W - R}" y1="${Ymi(0)}" y2="${Ymi(0)}" stroke="var(--axis)"/></svg>`;
-  const el = document.getElementById("cumChart");
-  el.innerHTML = s; bindTips(el);
 
-  // legend (only when two metrics share the chart)
-  const leg = document.getElementById("cumLegend");
-  if (leg) leg.innerHTML = dual
-    ? `<span class="sw" style="background:${cMi}"></span><span>distance (mi)</span>` +
-      `<span class="sw" style="background:${cEl}"></span><span>elevation (ft)</span>`
-    : "";
+  const el = document.getElementById("cumChart");
+  el.innerHTML = dual
+    ? chart("mi", cMi, distBand, "mi", "Distance") + `<div style="height:10px"></div>` + chart("elev", cEl, elevBand, "ft", "Elevation")
+    : chart("mi", cMi, distBand, "mi", "");
+  bindTips(el);
+  const leg = document.getElementById("cumLegend"); if (leg) leg.innerHTML = "";
   // caption
   const parts = [`${totMi.toFixed(1)} mi` + (dual ? ` / ${Math.round(totElev).toLocaleString()} ft` : "") + " so far"];
-  if (distBand) {   // met = into the low end of the range for every tracked metric
+  if (distBand) {
     const met = totMi >= distBand[0] && (!dual || totElev >= elevBand[0]);
-    parts.push(met ? "weekly goal met ✓"
-      : `goal ${rr(distBand)} mi${dual ? ` / ${rr(elevBand)} ft` : ""}`);
+    parts.push(met ? "weekly goal met ✓" : `goal ${rr(distBand)} mi${dual ? ` / ${rr(elevBand)} ft` : ""}`);
   }
   document.getElementById("cumSub").textContent = parts.join(" · ");
 }
