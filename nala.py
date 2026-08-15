@@ -1289,8 +1289,13 @@ def cmd_serve(args):
                     added = []
                     n_all, n_new = fetch_new_activities(
                         cfg, db, on_each=lambda rec, hint: added.append(rec))
+                    # return the FULL unconfirmed backlog (not just this sync's new
+                    # ones) so re-syncing before confirming doesn't drop earlier items
+                    unclassified = sorted((r for r in db.values() if r["pet"] is None),
+                                          key=lambda r: r["date"], reverse=True)
                     return self._send(200, json.dumps(
                         {"checked": n_all, "new": n_new, "activities": added,
+                         "unclassified": unclassified,
                          "circlesByDog": {d: unanswered_circle_days(cfg, db, d)
                                           for d in dog_names(cfg)}}))
                 if self.path == "/api/classify":

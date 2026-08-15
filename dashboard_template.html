@@ -1981,7 +1981,9 @@ if (DATA.live) {
     syncBtn.disabled = true; syncBtn.textContent = "Syncing…";
     try {
       const r = await post("/api/sync");
-      const acts = r.activities || [], byDog = r.circlesByDog || {};
+      // full unconfirmed backlog, not just this sync's new outings — so re-syncing
+      // before confirming keeps earlier unclassified items in the list
+      const acts = r.unclassified || r.activities || [], byDog = r.circlesByDog || {};
       const actRows = acts.filter(a => a.pet === null).map(a => reviewRow("activity", a.id, activityInfo(a)));
       const circDays = [...new Set(dogList.flatMap(d => byDog[d] || []))].sort();
       const circRows = circDays.map(k => reviewRow("circle", k, circleInfo(k)));
@@ -1991,7 +1993,6 @@ if (DATA.live) {
         setTimeout(() => location.reload(), 700);
         return;
       }
-      setPage(cfg.dog);
       showReview(`Sync: ${r.new} new outing(s), ${asks} to confirm`, actRows.concat(circRows));
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
       syncBtn.disabled = false; syncBtn.textContent = "↻ Sync now";
