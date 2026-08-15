@@ -722,7 +722,11 @@ function renderCumulative(dog) {
   incs.sort((a, b) => a.t - b.t);
   const totMi = incs.reduce((s, x) => s + x.mi, 0);
   const totElev = incs.reduce((s, x) => s + x.elev, 0);
-  const x0 = +weekStart, x1 = +weekEnd, nowClamp = Math.min(Date.now(), x1);
+  const x0 = +weekStart, x1 = +weekEnd;
+  // line/dot end: "now", but never left of the most recent outing (a just-logged
+  // outing can be timestamped later than the current moment) and within the week
+  const lastT = incs.length ? incs[incs.length - 1].t : x0;
+  const nowClamp = Math.min(x1, Math.max(Date.now(), lastT));
   const rr = a => `${(+a[0]).toLocaleString()}–${(+a[1]).toLocaleString()}`;
   const cMi = "var(--ex-dist)", cEl = "var(--ex-elev)";
 
