@@ -198,6 +198,8 @@
 
   ul.notes { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   ul.notes li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
+  ul.notes li.noterow { cursor: pointer; }
+  ul.notes li.noterow:hover { background: var(--band); }
   ul.notes .d { color: var(--ink-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
   /* click a food/treat to expand its full ingredient list */
   li details.ing > summary { cursor: pointer; list-style: none; outline: none; }
@@ -476,7 +478,8 @@
   <div class="card cond" id="notesCard" data-page="Nala Pepper" style="display:none">
     <h2>Notes</h2>
     <div class="sub" id="notesSub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
-    <div class="logrow" style="margin-bottom:12px"><input id="nIn" type="text" placeholder="add a note…" style="width:220px">
+    <div class="logrow" style="margin-bottom:12px"><input id="nDate" type="date" style="width:150px">
+      <input id="nIn" type="text" placeholder="add a note…" style="width:220px">
       <button class="btn" id="nBtn">Add note</button></div>
     <ul class="notes" id="notes"></ul>
     <button class="btn" id="notesToggle" style="display:none; margin-top:10px"></button>
@@ -1710,13 +1713,17 @@ function renderNotes(dog) {
   const card = document.getElementById("notesCard");
   const mine = DATA.notes.filter(n => (n.dog || cfg.dog) === dog).slice().reverse();
   card.style.display = (card.dataset.onpage !== "0" && (mine.length || DATA.live)) ? "" : "none";
-  document.getElementById("notesSub").textContent = dog === cfg.dog
+  document.getElementById("notesSub").textContent = (dog === cfg.dog
     ? "Stairs hesitation, paw-licking, stiffness, hunger strikes, etc."
-    : "Appetite, gut, and anything else notable";
+    : "Appetite, gut, and anything else notable") + (DATA.live ? " · tap a note to edit" : "");
   const shown = notesShowAll ? mine : mine.slice(0, NOTES_PREVIEW);
-  document.getElementById("notes").innerHTML = shown.map(n =>
-    `<li><span class="d">${n.date}</span>` +
+  const nEl = document.getElementById("notes");
+  nEl.innerHTML = shown.map(n =>
+    `<li${DATA.live ? ` class="noterow" data-id="${n.id}" data-date="${n.date}" data-text="${esc(n.text)}"` : ""}>` +
+    `<span class="d">${n.date}</span>` +
     `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>${esc(n.text)}</li>`).join("");
+  if (DATA.live && window.openNoteEditor)
+    nEl.querySelectorAll("li.noterow").forEach(li => li.onclick = () => window.openNoteEditor(li));
   const btn = document.getElementById("notesToggle");
   if (mine.length > NOTES_PREVIEW) {
     btn.style.display = "";
@@ -1998,14 +2005,41 @@ if (DATA.live) {
     catch (e) { flash("Failed: " + e.message, 4000); }
   };
 
-  const nBtn = document.getElementById("nBtn"), nIn = document.getElementById("nIn");
+  const nBtn = document.getElementById("nBtn"), nIn = document.getElementById("nIn"), nDate = document.getElementById("nDate");
+  if (nDate && !nDate.value) nDate.value = localISO(today);
   nBtn.onclick = async () => {
     const text = nIn.value.trim();
     if (!text) return flash("Type a note first");
-    try { await post("/api/note", { text, dog: activeDog });
+    try { await post("/api/note", { text, dog: activeDog, date: nDate.value || null });
           flash(`${esc(activeDog)} note added — reloading…`);
           setTimeout(() => location.reload(), 700); }
     catch (e) { flash("Failed: " + e.message, 4000); }
+  };
+
+  // click a note to edit its text/date (or delete it)
+  window.openNoteEditor = (li) => {
+    const id = +li.dataset.id, date = li.dataset.date, text = li.dataset.text;
+    li.onclick = null;
+    const inp = "font:inherit;font-size:14px;padding:5px 8px;border-radius:8px;border:1px solid var(--grid);background:var(--surface);color:var(--ink)";
+    li.innerHTML =
+      `<div class="mgrp" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;width:100%">` +
+      `<input class="neDate" type="date" value="${date}" style="${inp}width:150px">` +
+      `<input class="neText" type="text" value="${esc(text)}" style="${inp}flex:1;min-width:180px">` +
+      `<button class="btn primary neSave">Save</button>` +
+      `<button class="btn neDel">Delete</button>` +
+      `<button class="btn neCancel">Cancel</button></div>`;
+    li.querySelector(".neCancel").onclick = () => renderNotes(activeDog);
+    li.querySelector(".neDel").onclick = async () => {
+      try { await post("/api/note", { id, delete: true }); flash("Deleted — reloading…"); setTimeout(() => location.reload(), 600); }
+      catch (e) { flash("Failed: " + e.message, 4000); }
+    };
+    li.querySelector(".neSave").onclick = async () => {
+      const t = li.querySelector(".neText").value.trim();
+      if (!t) return flash("Note can't be empty");
+      try { await post("/api/note", { id, text: t, date: li.querySelector(".neDate").value || null });
+            flash("Saved — reloading…"); setTimeout(() => location.reload(), 600); }
+      catch (e) { flash("Failed: " + e.message, 4000); }
+    };
   };
 
   const petDog = dogList.find(d => d !== cfg.dog);

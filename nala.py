@@ -437,17 +437,50 @@ def cmd_weight(args):
     cmd_build(args)
 
 
+def load_notes():
+    """Notes list, ensuring every entry has a stable integer id (assigns +
+    persists any that are missing so older notes become editable)."""
+    log = load(NOTES, [])
+    nxt = max((n["id"] for n in log if isinstance(n.get("id"), int)), default=0) + 1
+    changed = False
+    for n in log:
+        if not isinstance(n.get("id"), int):
+            n["id"] = nxt; nxt += 1; changed = True
+    if changed:
+        save(NOTES, log)
+    return log
+
+
 def log_note(text, d, dog=None):
     """Notes without a 'dog' field are the primary dog's."""
     cfg = config()
-    log = load(NOTES, [])
-    entry = {"date": d, "text": text}
+    log = load_notes()
+    entry = {"id": max((n["id"] for n in log), default=0) + 1, "date": d, "text": text}
     if dog and dog != cfg["dog"]:
         entry["dog"] = dog
     log.append(entry)
     log.sort(key=lambda e: e["date"])
     save(NOTES, log)
     return dog or cfg["dog"]
+
+
+def edit_note(note_id, text=None, date=None):
+    """Update a note's text and/or date by id."""
+    log = load_notes()
+    n = next((x for x in log if x.get("id") == note_id), None)
+    if n is None:
+        raise KeyError("note not found")
+    if text is not None:
+        n["text"] = text
+    if date:
+        n["date"] = date
+    log.sort(key=lambda e: e["date"])
+    save(NOTES, log)
+
+
+def delete_note(note_id):
+    """Remove a note by id."""
+    save(NOTES, [x for x in load_notes() if x.get("id") != note_id])
 
 
 def cmd_note(args):
@@ -1190,7 +1223,7 @@ def build_payload(cfg, db):
         "circlesByDog": by_dog,
         "circles_unansweredByDog": unans,
         "weight": load(WEIGHT, []),
-        "notes": load(NOTES, []),
+        "notes": load_notes(),
         "meals": load(MEALS, {}),
         "gi": load_gi(cfg),
         "vet": load_vet(cfg),
@@ -1333,8 +1366,14 @@ def cmd_serve(args):
                     log_weight(float(body["lb"]), d, body.get("dog"))
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/note":
-                    d = body.get("date") or datetime.now(tz()).date().isoformat()
-                    log_note(body["text"], d, body.get("dog"))
+                    if body.get("id") is not None:            # edit or delete an existing note
+                        if body.get("delete"):
+                            delete_note(int(body["id"]))
+                        else:
+                            edit_note(int(body["id"]), body.get("text"), body.get("date"))
+                    else:                                     # add a new note
+                        d = body.get("date") or datetime.now(tz()).date().isoformat()
+                        log_note(body["text"], d, body.get("dog"))
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/meal":
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
