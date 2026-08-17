@@ -327,7 +327,6 @@
   .medgrid .dow { text-align: center; font-size: 10px; color: var(--ink-muted); }
   .medcell { min-height: 34px; border: 1px solid var(--grid); border-radius: 5px; padding: 2px 3px; }
   .medcell.blank { border: none; }
-  .medcell.today { border-color: var(--series); box-shadow: inset 0 0 0 1px var(--series); }
   .medcell.future { opacity: 0.5; }
   .medcell.clickable { cursor: pointer; }
   .medcell.clickable:hover { background: var(--band); }
@@ -1287,10 +1286,10 @@ function renderFood(dog) {
               return `${esc(p.it.label)}: ${ok ? "✓" : "✗ skipped" + kc}`;
             }).join(" · ");
         if (rec && rec.other) t += `<br>◆ ${esc(rec.other)}`;
-        attrs = ` data-tip="${esc(t)}" data-iso="${k}" class="eatcell"`;   // clickable to edit
+        attrs = ` data-tip="${esc(t)}" data-iso="${k}" class="eatcell${+d === +today ? " sel" : ""}"`;   // clickable to edit; today selected by default
       }
       svg += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4" fill="${fill}"` +
-             ` stroke="${+d === +today ? "var(--ink-2)" : "var(--grid)"}" stroke-width="${+d === +today ? 1.5 : 1}"` +
+             ` stroke="var(--grid)" stroke-width="1"` +
              (future ? ' opacity="0.35"' : "") + attrs + `/>`;
       if (rec && rec.other && !future)
         svg += `<path d="M ${x + cell - 8} ${yr + 2} l 6 0 l 0 6 z" fill="var(--ink)" pointer-events="none"/>`;
@@ -1681,7 +1680,7 @@ function renderMeds(dog) {
         `${m.freq ? " (" + esc(m.freq) + ")" : ""}`).join(", "))
       .concat(due.map(r => `${esc(r.name)} due`));
     const tip = tipRows.length ? `<b>${fmtDay(dt)}</b>` + tipRows.join("<br>") : "";
-    html += `<div class="medcell clickable${+dt === +today ? " today" : ""}${dt > today ? " future" : ""}" data-iso="${iso}"` +
+    html += `<div class="medcell clickable${+dt === +today ? " sel" : ""}${dt > today ? " future" : ""}" data-iso="${iso}"` +
             `${tip ? ` data-tip="${esc(tip)}"` : ""}><div class="dnum">${day}</div><div class="mdots">${dots}</div></div>`;
   }
   const grid = document.getElementById("medGrid"); grid.innerHTML = html; bindTips(grid);
