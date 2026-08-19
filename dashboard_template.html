@@ -1151,10 +1151,10 @@ function renderRecent(dog) {
   const outs = aggFor(dog).pets.slice().reverse();
   document.getElementById("recentSummary").textContent = `Recent outings (${outs.length})`;
   document.getElementById("recentTable").innerHTML = outs.length
-    ? `<table><tr><th>Date</th><th>Activity</th><th>Type</th><th class="num">Time</th><th class="num">Miles</th></tr>` +
+    ? `<table><tr><th>Date</th><th>Activity</th><th>Type</th><th class="num">Time</th><th class="num">Miles</th><th class="num">Elev</th></tr>` +
       outs.map(a => `<tr><td>${a.date.slice(0, 10)}</td>` +
                     `<td><a href="https://www.strava.com/activities/${a.id}" target="_blank" rel="noopener">${esc(a.name)}</a></td><td>${esc(a.type)}</td>` +
-                    `<td class="num">${fmtTime(a.min)}</td><td class="num">${a.mi.toFixed(1)}</td></tr>`).join("") +
+                    `<td class="num">${fmtTime(a.min)}</td><td class="num">${a.mi.toFixed(1)}</td><td class="num">${Math.round(a.elev_ft || 0).toLocaleString()} ft</td></tr>`).join("") +
       `</table>`
     : `<div class="sub">No outings logged for ${esc(dog)} yet.</div>`;
 }
