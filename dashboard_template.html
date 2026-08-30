@@ -1304,15 +1304,8 @@ function renderFood(dog) {
   legend += `<span style="margin-left:8px">◆ different/new food</span>`;
   // logging: everything defaults to "yes"; each chip is on (eaten/given) unless
   // that item was explicitly skipped — click a chip to toggle today's value.
-  const todayRec = meals[localISO(today)] || {};
-  const controls = (DATA.live && window.logMeal)
-    ? `<div id="foodLog" class="on"><span class="lbl">Today:</span>` +
-      logItems.map(it => {
-        const skipped = todayRec[it.key] === false;
-        return `<button class="eatchip${skipped ? " off" : ""}" data-key="${it.key}" data-skipped="${skipped}">${esc(it.label)}</button>`;
-      }).join("") +
-      `<span class="mgrp"><input id="foodOther" placeholder="different/new food…" style="width:150px"><button class="btn" id="foodOtherBtn">Log</button></span></div>`
-    : "";
+  // meal controls are populated per selected day (see paintMealCtl in the live block)
+  const controls = (DATA.live && window.logMeal) ? `<div id="foodLog" class="on"></div>` : "";
   const eatContent = total
     ? `<div class="scroll">${svg}</div><div class="legend">${legend}</div>${controls}`
     : `<div class="sub">Nothing to log.</div>`;
@@ -1410,16 +1403,28 @@ function renderFood(dog) {
   eatBody.innerHTML = eatContent + dietBlock;
   bindTips(eatBody);
   if (DATA.live && window.logMeal) {
-    eatBody.querySelectorAll(".eatchip").forEach(b =>
-      // was skipped → set back to yes (true); was on → mark skipped (false)
-      b.onclick = () => window.logMeal(dog, { [b.dataset.key]: b.dataset.skipped === "true" }));
-    const ob = eatBody.querySelector("#foodOtherBtn");
-    if (ob) ob.onclick = () => { const v = eatBody.querySelector("#foodOther").value.trim(); if (v) window.logMeal(dog, { other: v }); };
-    if (window.openFoodEditor)
-      eatBody.querySelectorAll("rect.eatcell").forEach(r => r.onclick = () => {
-        eatBody.querySelectorAll("rect.eatcell.sel").forEach(x => x.classList.remove("sel"));
-        r.classList.add("sel");               // highlight the day being edited
-        window.openFoodEditor(dog, r.dataset.iso);
+    // controls act on the SELECTED day (today by default). clicking a calendar day
+    // switches the selection so a toggle logs THAT day, not always today.
+    const paintMealCtl = (iso) => {
+      const el = document.getElementById("foodLog"); if (!el) return;
+      const rec = meals[iso] || {}, y = iso.slice(0, 4);
+      const lbl = fmtDay(new Date(iso + "T00:00:00")) + (y !== String(today.getFullYear()) ? ` ’${y.slice(2)}` : "");
+      el.innerHTML = `<span class="lbl">${esc(lbl)}:</span>` +
+        logItems.map(it => {
+          const skipped = rec[it.key] === false;   // was skipped → click sets back to yes; else marks skipped
+          return `<button class="eatchip${skipped ? " off" : ""}" data-key="${it.key}" data-skipped="${skipped}">${esc(it.label)}</button>`;
+        }).join("") +
+        `<span class="mgrp"><input class="foodOther" placeholder="different/new food…" value="${esc(rec.other || "")}" style="width:150px"><button class="btn foodOtherBtn">Log</button></span>`;
+      el.querySelectorAll(".eatchip").forEach(b =>
+        b.onclick = () => window.logMeal(dog, { date: iso, [b.dataset.key]: b.dataset.skipped === "true" }));
+      const ob = el.querySelector(".foodOtherBtn");
+      if (ob) ob.onclick = () => window.logMeal(dog, { date: iso, other: el.querySelector(".foodOther").value.trim() });
+    };
+    paintMealCtl(localISO(today));
+    eatBody.querySelectorAll("rect.eatcell").forEach(r => r.onclick = () => {
+      eatBody.querySelectorAll("rect.eatcell.sel").forEach(x => x.classList.remove("sel"));
+      r.classList.add("sel");               // highlight the selected day
+      paintMealCtl(r.dataset.iso);          // point the controls at it
       });
   }
 }

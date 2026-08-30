@@ -1241,22 +1241,29 @@ def render_html(live=False):
     db = load(ACTIVITIES, {})
     payload = build_payload(cfg, db)
     payload["live"] = live
+    # Images: in a live server, reference them as file URLs so the browser caches
+    # them and a reload after an edit re-fetches only the small HTML (not ~4 MB of
+    # re-embedded photos). For the static build, embed base64 so the file stays
+    # self-contained.
+    def _img(rel_url, file_path, mime):
+        if live:
+            return rel_url
+        return f"data:image/{mime};base64," + base64.b64encode(file_path.read_bytes()).decode()
     # one header photo per dog, from assets/<dog>.{jpg,jpeg,png} (lowercased)
     photos = {}
     for d in dog_names(cfg):
         for ext, mime in (("jpg", "jpeg"), ("jpeg", "jpeg"), ("png", "png")):
             f = BASE / "assets" / f"{d.lower()}.{ext}"
             if f.exists():
-                photos[d] = f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode()
+                photos[d] = _img(f"assets/{f.name}", f, mime)
                 break
     payload["photos"] = photos
-    # embed origin photos (gallery + labelled siblings) as base64 data URIs,
-    # resolving each entry's filename against origins/<dog>/
+    # origin photos (gallery + labelled siblings), resolved against origins/<dog>/
     def _embed_origin(dog, fname):
         f = BASE / "origins" / dog.lower() / (fname or "")
         mime = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png"}.get(f.suffix.lower())
         if fname and mime and f.is_file():
-            return f"data:image/{mime};base64," + base64.b64encode(f.read_bytes()).decode()
+            return _img(f"origins/{dog.lower()}/{fname}", f, mime)
         return None
     for d, o in (payload.get("origins") or {}).items():
         entries = list(o.get("photos", [])) + list(o.get("siblings", []))
@@ -1283,10 +1290,20 @@ def cmd_serve(args):
     cfg = config()
 
     class Handler(BaseHTTPRequestHandler):
-        def _send(self, code, body, ctype="application/json"):
+        def _send(self, code, body, ctype="application/json", cache=None):
             data = body.encode() if isinstance(body, str) else body
+            enc = None
+            # gzip text/JSON (the HTML page compresses ~5x); skip already-compressed images
+            if (len(data) > 1024 and (ctype.startswith("text/") or "json" in ctype)
+                    and "gzip" in (self.headers.get("Accept-Encoding") or "")):
+                import gzip
+                data = gzip.compress(data, 6); enc = "gzip"
             self.send_response(code)
             self.send_header("Content-Type", ctype)
+            if enc:
+                self.send_header("Content-Encoding", enc)
+            if cache:
+                self.send_header("Cache-Control", cache)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -1294,19 +1311,20 @@ def cmd_serve(args):
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 return self._send(200, render_html(live=True), "text/html; charset=utf-8")
-            # serve source records (read-only): PDFs anywhere under the project dir,
-            # image records only from vet_records/ so private photos aren't exposed.
+            # serve source/media files (read-only): PDFs anywhere under the project
+            # dir; images only from the media dirs. All are cached so a page reload
+            # after an edit doesn't re-download them.
             path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
             _CT = {".pdf": "application/pdf", ".jpg": "image/jpeg",
                    ".jpeg": "image/jpeg", ".png": "image/png"}
             ext = os.path.splitext(path)[1].lower()
             if ext in _CT:
                 target = (BASE / path.lstrip("/")).resolve()
-                recdir = (BASE / "vet_records").resolve()
-                ok_dir = ext == ".pdf" or str(target).startswith(str(recdir))
+                img_dirs = [(BASE / d).resolve() for d in ("vet_records", "assets", "origins", "baby_photos")]
+                ok_dir = ext == ".pdf" or any(str(target).startswith(str(p)) for p in img_dirs)
                 if (str(target).startswith(str(BASE.resolve()))
                         and ok_dir and target.is_file()):
-                    return self._send(200, target.read_bytes(), _CT[ext])
+                    return self._send(200, target.read_bytes(), _CT[ext], cache="max-age=86400")
                 return self._send(404, "not found", "text/plain")
             self._send(404, "not found", "text/plain")
 
