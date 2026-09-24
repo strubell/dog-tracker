@@ -1027,34 +1027,64 @@ function renderPepperPlan(dog) {
   const [lo, hi] = cfg.weight_target_lb;
   const T0 = d => +new Date(d + "T00:00:00");
 
-  function drawWeight(elId, seriesList, x0, x1, ticks, bands) {
-    const W = 460, H = 240, L = 36, R = 14, T = 12, B = 26;
-    const plotW = W - L - R, plotH = H - T - B;
+  // spans: [{t0, t1, share}] — one span is a plain time axis; several make a broken
+  // axis, each span getting `share` of the plot width with a small gap between
+  function drawWeight(elId, seriesList, spans, ticks, bands) {
+    const W = 460, H = 240, L = 36, R = 14, T = 12, B = 26, GAP = 16;
+    const plotW = W - L - R, plotH = H - T - B, base = T + plotH;
+    const usable = plotW - GAP * (spans.length - 1);
+    const segs = []; let px = L;
+    for (const sp of spans) {
+      const w = usable * (sp.share ?? 1 / spans.length);
+      segs.push({ ...sp, p0: px, p1: px + w }); px += w + GAP;
+    }
+    const segOf = t => segs.find(sg => t >= sg.t0 && t <= sg.t1);
+    const X = t => {
+      const sg = segOf(t) || (t < segs[0].t0 ? segs[0] : segs[segs.length - 1]);
+      return sg.p0 + (sg.p1 - sg.p0) * (t - sg.t0) / (sg.t1 - sg.t0);
+    };
     const lbs = seriesList.flatMap(s => s.pts.map(e => e.lb));
     const yLo = Math.min(...bands.map(b => b.lo - 2), ...lbs) - 1;
     const yHi = Math.max(...bands.map(b => b.hi), ...lbs) + 1.5;
     const step = yHi - yLo > 18 ? 4 : 2;
-    const X = t => L + plotW * (t - x0) / (x1 - x0);
     const Y = v => T + plotH * (1 - (v - yLo) / (yHi - yLo));
     let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:320px" role="img" aria-label="Weight log">`;
-    for (let v = Math.ceil(yLo / step) * step; v <= yHi; v += step)
-      s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/>` +
-           `<text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
-    for (const b of bands)
-      s += `<rect x="${L}" y="${Y(b.hi)}" width="${plotW}" height="${Y(b.lo) - Y(b.hi)}" fill="var(--band)"/>` +
-           `<text x="${b.left ? L + 4 : W - R - 4}" y="${b.below ? Y(b.lo) + 13 : Y(b.hi) - 4}"` +
+    for (let v = Math.ceil(yLo / step) * step; v <= yHi; v += step) {
+      for (const sg of segs)
+        s += `<line x1="${sg.p0}" x2="${sg.p1}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/>`;
+      s += `<text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+    }
+    for (const b of bands) {
+      for (const sg of segs)
+        s += `<rect x="${sg.p0}" y="${Y(b.hi)}" width="${sg.p1 - sg.p0}" height="${Y(b.lo) - Y(b.hi)}" fill="var(--band)"/>`;
+      s += `<text x="${b.left ? L + 4 : W - R - 4}" y="${b.below ? Y(b.lo) + 13 : Y(b.hi) - 4}"` +
            ` text-anchor="${b.left ? "start" : "end"}">${b.label}</text>`;
+    }
+    let lastLabelX = -Infinity;   // drop labels that would overlap the previous one
     for (const tk of ticks) {
+      if (!segOf(tk.t)) continue;
       const xx = X(tk.t);
-      if (xx < L || xx > W - R) continue;
-      if (tk.line) s += `<line x1="${xx}" x2="${xx}" y1="${T}" y2="${T + plotH}" stroke="var(--axis)"/>`;
+      if (tk.line) s += `<line x1="${xx}" x2="${xx}" y1="${T}" y2="${base}" stroke="var(--axis)"/>`;
+      if (xx - lastLabelX < 36) continue;
       s += `<text x="${xx}" y="${H - 8}" text-anchor="middle">${tk.label}</text>`;
+      lastLabelX = xx;
     }
     for (const ser of seriesList) {
       const color = dogColor(ser.name);
+      // solid line within a span; a dashed connector where the line crosses a break
+      let d = "", prev = null;
+      for (const e of ser.pts) {
+        const t = T0(e.date), sg = segOf(t) || segs[0];
+        const pt = `${X(t)},${Y(e.lb)}`;
+        if (prev && prev.sg !== sg) {
+          s += `<line x1="${prev.x}" y1="${prev.y}" x2="${X(t)}" y2="${Y(e.lb)}" stroke="${color}"` +
+               ` stroke-width="2" stroke-dasharray="3 4" opacity=".6"/>`;
+          d += ` M${pt}`;
+        } else d += (d ? " L" : "M") + pt;
+        prev = { sg, x: X(t), y: Y(e.lb) };
+      }
       if (ser.pts.length > 1)
-        s += `<path d="M` + ser.pts.map(e => `${X(T0(e.date))},${Y(e.lb)}`).join(" L") +
-             `" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+        s += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
       for (const e of ser.pts) {
         const who = seriesList.length > 1 ? `${ser.name} · ` : "";
         const t = `<b>${who}${e.date}</b>${e.lb.toFixed(1)} lb${e.note ? "<br>" + esc(e.note) : ""}`;
@@ -1062,7 +1092,14 @@ function renderPepperPlan(dog) {
              ` stroke="var(--surface)" stroke-width="2" data-tip="${esc(t)}"/>`;
       }
     }
-    s += `<line x1="${L}" x2="${W - R}" y1="${T + plotH}" y2="${T + plotH}" stroke="var(--axis)"/></svg>`;
+    segs.forEach((sg, i) => {
+      s += `<line x1="${sg.p0}" x2="${sg.p1}" y1="${base}" y2="${base}" stroke="var(--axis)"/>`;
+      if (i === 0) return;
+      // axis-break marks: a slanted tick at each edge of the gap
+      for (const xx of [segs[i - 1].p1, sg.p0])
+        s += `<line x1="${xx - 3}" y1="${base + 5}" x2="${xx + 3}" y2="${base - 5}" stroke="var(--axis)" stroke-width="1.5"/>`;
+    });
+    s += `</svg>`;
     const el = document.getElementById(elId);
     el.innerHTML = s; bindTips(el);
   }
@@ -1088,6 +1125,20 @@ function renderPepperPlan(dog) {
       t.push({ t: +m, label: m.toLocaleDateString(undefined, { month: "short" }) });
     return t;
   };
+  // Weigh-ins used to be yearly and are now weekly, so one linear axis piles the
+  // recent ones into a few pixels. When there's a dense tail (4+ points no more
+  // than 45 days apart) that would get under 30% of the axis, break the axis and
+  // give the tail its own stretch.
+  function historySpans(pts) {
+    const whole = [{ t0: hx0, t1: hx1 }];
+    let i = pts.length - 1;
+    while (i > 0 && T0(pts[i].date) - T0(pts[i - 1].date) <= 45 * DAY) i--;
+    if (i === 0 || pts.length - i < 4) return whole;
+    const tail0 = T0(pts[i].date), leftEnd = T0(pts[i - 1].date);
+    if ((hx1 - tail0) / (hx1 - hx0) > 0.3) return whole;
+    return [{ t0: hx0, t1: leftEnd + 30 * DAY, share: 0.55 },
+            { t0: tail0 - 10 * DAY, t1: hx1, share: 0.45 }];
+  }
   window.renderWeightHistory = function (dog) {
     const isPrimary = dog === cfg.dog;
     const pts = all.filter(e => (e.dog || cfg.dog) === dog);
@@ -1107,13 +1158,18 @@ function renderPepperPlan(dog) {
         { t: +addDays(planStart, mile1 * 7), label: `wk ${mile1}`, line: true },
         { t: +addDays(planStart, mile2 * 7), label: `wk ${mile2}`, line: true },
       ] : monthTicks(rx0, rx1);
-      drawWeight("weightHist", [{ name: dog, pts: rpts }], rx0, rx1, ticks, bands);
+      drawWeight("weightHist", [{ name: dog, pts: rpts }], [{ t0: rx0, t1: rx1 }], ticks, bands);
       document.getElementById("weightSub").textContent = isPrimary
         ? `Plan window · re-weigh every 2–4 weeks · milestones at wk ${mile1} and ${mile2}`
         : "Recent weigh-ins";
     } else {
-      drawWeight("weightHist", [{ name: dog, pts }], hx0, hx1, hTicks, bands);
-      document.getElementById("weightSub").textContent = "All known weigh-ins";
+      const spans = historySpans(pts);
+      const broken = spans.length > 1;
+      const ticks = broken ? hTicks.concat(monthTicks(spans[1].t0, spans[1].t1)) : hTicks;
+      drawWeight("weightHist", [{ name: dog, pts }], spans, ticks, bands);
+      document.getElementById("weightSub").textContent = broken
+        ? "All known weigh-ins · axis breaks so the recent weigh-ins have room"
+        : "All known weigh-ins";
     }
     document.getElementById("weightToggle").querySelectorAll("[data-wmode]").forEach(b =>
       b.onclick = () => { weightMode = b.dataset.wmode; renderWeightHistory(dog); });
