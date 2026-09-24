@@ -184,6 +184,15 @@
   ol.phases li.done .ph-t::after { content: " ✓"; color: var(--good); }
   ol.phases .ph-n { font-size: 13px; color: var(--ink-2); }
   ol.phases li.done .ph-n { color: var(--ink-muted); }
+  table.planwk { margin-top: 4px; }
+  table.planwk th, table.planwk td { padding: 5px 8px 5px 0; font-size: 13px; vertical-align: top; line-height: 1.3;
+                                     white-space: nowrap; }
+  table.planwk .d { color: var(--ink-muted); font-size: 12px; }
+  table.planwk td:first-child .d { white-space: normal; }
+  table.planwk tr.now td { background: var(--series-wash); }
+  table.planwk tr.now td:first-child { border-left: 3px solid var(--series); padding-left: 6px; }
+  table.planwk tr.done td { color: var(--ink-muted); }
+  table.planwk tr.done td:first-child::after { content: " ✓"; color: var(--good); }
   ol.phases .ph-tag { font-size: 11px; font-weight: 600; color: var(--ink-muted);
     border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
   /* this week's progress: actual vs target bars */
@@ -420,7 +429,7 @@
     <div class="card" id="planCardP">
       <h2 id="planHeadingP">The plan</h2>
       <div class="sub" id="planSubP"></div>
-      <ol class="phases" id="pepperWeeks"></ol>
+      <div id="pepperWeeks"></div>
     </div>
   </div>
 
@@ -511,7 +520,7 @@ const dogColor = name =>
 // dog this ramps with the plan: the current phase's weekly_mi, else the flat target.
 const weeklyGoalFor = dog => {
   if (dog !== cfg.dog) return (cfg.other_dog_miles_target || {})[dog] || null;
-  const ph = phaseFor(planWeek);
+  const ph = currentPhase();
   return (ph && ph.weekly_mi) || cfg.weekly_miles_target || null;
 };
 // the plan week (from a per-dog goal plan) that contains today — else nearest past, else null
@@ -547,7 +556,7 @@ function weeklyGoals(dog) {
              weekStart: pw.ws, weekEnd: addDays(pw.we || pw.ws, 1), label: typeof pw.w.week === "number" ? `Week ${pw.w.week}` : String(pw.w.week) };
   }
   if (dog === cfg.dog) {
-    const ph = phaseFor(planWeek), wm = (ph && ph.weekly_mi) || cfg.weekly_miles_target || null;
+    const ph = currentPhase(), wm = (ph && ph.weekly_mi) || cfg.weekly_miles_target || null;
     return { dist: wm, elev: null, weekStart: thisMonday, weekEnd: addDays(thisMonday, 7), label: null };
   }
   return { dist: null, elev: null, weekStart: thisMonday, weekEnd: addDays(thisMonday, 7), label: null };
@@ -585,6 +594,17 @@ const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quo
 function phaseFor(week) {
   if (week < 1) return null;
   return cfg.phases.find(p => week >= p.weeks[0] && (p.weeks[1] == null || week <= p.weeks[1]));
+}
+// the phase the primary dog is in now. A weight-gated plan advances on weight, not
+// week: the first phase whose gate floor she is still at or above (so 54.9 lb with
+// gates 52–55 / 48–52 / 46–48 is the first phase; 51 lb the second).
+function currentPhase() {
+  const gated = cfg.phases.filter(p => p.gate_lb);
+  if (gated.length) {
+    const wl = DATA.weight.filter(e => (e.dog || cfg.dog) === cfg.dog).sort((a, b) => a.date < b.date ? -1 : 1);
+    if (wl.length) { const lb = wl[wl.length - 1].lb; return gated.find(p => lb >= p.gate_lb[0]) || gated[gated.length - 1]; }
+  }
+  return phaseFor(planWeek);
 }
 
 // ---- aggregates (per dog) -------------------------------------------------
@@ -654,7 +674,7 @@ function renderKpis(dog) {
   const miDeltaTxt = miDelta === 0 ? "same as last week"
     : `${miDelta > 0 ? "▲" : "▼"} ${Math.abs(miDelta).toFixed(1)} vs last week`;
   // miles target only for the dog on the reconditioning plan
-  const ph = isPrimary ? phaseFor(planWeek) : null;
+  const ph = isPrimary ? currentPhase() : null;
   const miTarget = ph && ph.daily_mi ? `phase target ${ph.daily_mi[0]}–${ph.daily_mi[1]} mi/day` : "";
   // weight: latest weigh-in, delta vs the previous one, and the dog's target band
   const wl = DATA.weight.filter(e => (e.dog || cfg.dog) === dog).sort((a, b) => a.date < b.date ? -1 : 1);
@@ -982,38 +1002,27 @@ function renderPepperPlan(dog) {
   if (!plan) return;
   document.getElementById("planHeadingP").textContent = "Project Peak Pepper";
   document.getElementById("planSubP").textContent = plan.subtitle || "";
-  const range = s => {
-    if (!s) return [null, null];
-    const [a, b] = s.split("/");
-    return [a ? new Date(a + "T00:00:00") : null, b ? new Date(b + "T00:00:00") : null];
-  };
-  const cur = planWeekNow(dog);   // current plan week, for highlighting (progress lives up top)
+  const cur = planWeekNow(dog);
   const rMi = a => Array.isArray(a) ? `${a[0]}–${a[1]}` : `${a}`;
   const rFt = a => Array.isArray(a) ? `${a[0].toLocaleString()}–${a[1].toLocaleString()}` : `${(+a).toLocaleString()}`;
-  const miFt = o => `${rMi(o.mi)} mi${o.elev_ft ? ` / ${rFt(o.elev_ft)} ft` : ""}`;
-
-  // ---- the weekly schedule (Nala-style: theme in the title, targets in the body) ----
-  document.getElementById("pepperWeeks").innerHTML = plan.weeks.map(w => {
-    const [, we] = range(w.dates);
-    const now = cur && cur.w === w;
-    const done = we && today > we;
-    const label = typeof w.week === "number"
-      ? `Week ${w.week}${w.title ? " — " + esc(w.title) : ""}`
-      : `${w.the_hike ? "🏔 " : ""}${esc(w.title || String(w.week))}`;
-    let body;
-    if (w.the_hike) {   // merged hike week: taper to baseline walks, then the summit
-      body = `Easy baseline walks, then the traverse — <b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b>`;
-    } else if (w.total) {
-      const m = w.midweek, l = w.long, sub = [];
-      if (m) sub.push(`Midweek hills ${miFt(m)}`);
-      if (l) sub.push(`Long hike ${miFt(l)}` + (l.descent_ft_min ? ` · walked descent ≥${l.descent_ft_min.toLocaleString()} ft` : ""));
-      if (l && l.flag) sub.push(esc(l.flag));
-      body = `<b>Total: ${miFt(w.total)}</b>` +
-             (sub.length ? `<div class="d" style="margin-top:2px">${sub.join("<br>")}</div>` : "");
-    } else body = "";
-    return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}</div><div class="ph-n">${body}</div></li>`;
-  }).join("") + (plan.after_week_12
-    ? `<li><div class="ph-t">After week ${plan.weeks.length}</div><div class="ph-n">${esc(plan.after_week_12)}</div></li>` : "");
+  // a session cell: miles on top, elevation (and any walked-descent minimum) under it
+  const cell = o => !o ? "" : `${rMi(o.mi)} mi` +
+    (o.elev_ft || o.descent_ft_min
+      ? `<br><span class="d">${o.elev_ft ? rFt(o.elev_ft) + " ft" : ""}${o.descent_ft_min ? ` · ↓${o.descent_ft_min.toLocaleString()}+` : ""}</span>` : "");
+  const rows = plan.weeks.map(w => {
+    const [a, b] = (w.dates || "/").split("/");
+    const we = b ? new Date(b + "T00:00:00") : null;
+    const cls = cur && cur.w === w ? "now" : we && today > we ? "done" : "";
+    const flag = w.long && w.long.flag ? ` <span class="ph-tag" title="${esc(w.long.flag)}">go/no-go</span>` : "";
+    const wk = `${esc(String(w.week))}${flag}${w.title ? `<br><span class="d">${esc(w.title)}</span>` : ""}`;
+    const long = w.the_hike ? `${w.the_hike.mi} mi<br><span class="d">${(+w.the_hike.elev_ft).toLocaleString()} ft</span>` : cell(w.long);
+    return `<tr class="${cls}"><td>${wk}</td><td>${a ? fmtDay(new Date(a + "T00:00:00")) : ""}</td>` +
+           `<td>${cell(w.midweek)}</td><td>${long}</td><td class="num">${w.total ? cell(w.total) : ""}</td></tr>`;
+  });
+  document.getElementById("pepperWeeks").innerHTML =
+    `<div class="scroll"><table class="planwk"><tr><th>Wk</th><th>Starts</th><th>Wed hills</th><th>Sat long</th><th class="num">Total</th></tr>` +
+    rows.join("") + `</table></div>` +
+    (plan.after_week_12 ? `<div class="sub" style="margin-top:8px">After week ${plan.weeks.length}: ${esc(plan.after_week_12)}</div>` : "");
 }
 
 // ---- weight charts --------------------------------------------------------------
@@ -1184,19 +1193,54 @@ function renderPepperPlan(dog) {
 
 // ---- phases ----------------------------------------------------------------------
 document.getElementById("planHeading").textContent = `${cfg.dog}'s Comeback Plan`;
-document.getElementById("phases").innerHTML = cfg.phases.map(p => {
-  const done = p.weeks[1] != null && planWeek > p.weeks[1];
-  const now = phaseFor(planWeek) === p;
-  const range = p.weeks[1] == null ? `Week ${p.weeks[0]}+` : `Weeks ${p.weeks[0]}–${p.weeks[1]}`;
-  const daily = p.daily_mi
-    ? `${p.daily_mi[0]}–${p.daily_mi[1]} mi/day${p.daily_min ? ` (${p.daily_min[0]}–${p.daily_min[1]} min)` : ""} · `
-    : "";
-  const weekly = p.weekly_mi ? `~${p.weekly_mi[0]}–${p.weekly_mi[1]} mi/week · ` : "";
-  return `<li class="${now ? "now" : done ? "done" : ""}">` +
-         `<div class="ph-t">${range} — ${esc(p.title)}</div>` +
-         `<div class="ph-n">${daily}${weekly}${esc(p.notes)}</div></li>`;
-}).join("");
-// guardrails sit at the top, under the distance-primary subtitle
+{
+  const now = currentPhase();
+  const gated = cfg.phases.filter(p => p.gate_lb);
+  const shown = gated.length ? gated : cfg.phases;   // a weight-gated plan shows just its own phases
+  // phases from before a weight-gated plan took over are history, whatever the week
+  const earlier = cfg.phases.filter(p => !shown.includes(p) && (gated.length || (p.weeks[1] != null && planWeek > p.weeks[1])));
+  const r = a => `${a[0]}–${a[1]}`, ft = n => (+n).toLocaleString();
+  const line = p => {
+    const b = [];
+    if (p.daily_mi) b.push(`${r(p.daily_mi)} mi/day`);
+    if (p.weekly_mi) b.push(`${r(p.weekly_mi)} mi/week`);
+    if (p.long_day) b.push(`long day ≤${p.long_day.mi_max} mi / ${ft(p.long_day.elev_ft_max)} ft`);
+    if (p.long_day_progression) {
+      const st = p.long_day_progression;
+      b.push(`Sat long ${st[0].mi} → ${st[st.length - 1].mi} mi in ${st.length} steps`);
+    }
+    if (p.terrain) b.push(p.terrain);
+    return b.join(" · ");
+  };
+  // the conditioning phase carries a weekday schedule and long-day steps: collapsed
+  const detail = p => {
+    if (!p.weekly_schedule && !p.long_day_progression) return "";
+    let h = `<details class="tv"><summary>Schedule &amp; long-day steps</summary>`;
+    if (p.weekly_schedule)
+      h += `<div class="ph-n" style="margin-top:6px">` + p.weekly_schedule.map(d =>
+        `${d.day} ${d.type}${d.mi_min != null ? ` ${d.mi_min}–${d.mi_max} mi` : ""}${d.elev_ft ? ` / ${r(d.elev_ft)} ft` : ""}`).join(" · ") + `</div>`;
+    if (p.long_day_progression)
+      h += `<div class="ph-n" style="margin-top:4px">Long-day steps (mi / ft): ` +
+           p.long_day_progression.map(x => `${x.mi} / ${ft(x.elev_ft)}`).join(" → ") + `</div>`;
+    if (p.advance_rule) h += `<div class="ph-n" style="margin-top:4px">${esc(p.advance_rule)}</div>`;
+    if (p.easy_jog) h += `<div class="ph-n" style="margin-top:4px">Optional ${p.easy_jog.mi} mi jog ${p.easy_jog.per_week}×/week from step ${p.easy_jog.after_step}.</div>`;
+    return h + `</details>`;
+  };
+  const items = shown.map(p => {
+    const isNow = p === now;
+    const isDone = gated.length ? gated.indexOf(p) < gated.indexOf(now)
+                                : p.weeks[1] != null && planWeek > p.weeks[1];
+    const title = p.gate_lb
+      ? `${esc(p.title)} <span class="ph-tag">${r(p.gate_lb)} lb</span>`
+      : `${p.weeks[1] == null ? `Week ${p.weeks[0]}+` : `Weeks ${r(p.weeks)}`} — ${esc(p.title)}`;
+    return `<li class="${isNow ? "now" : isDone ? "done" : ""}"><div class="ph-t">${title}</div>` +
+           `<div class="ph-n">${line(p)}</div>${detail(p)}</li>`;
+  });
+  if (earlier.length)
+    items.push(`<li class="done"><div class="ph-n">Weeks ${earlier[0].weeks[0]}–${earlier[earlier.length - 1].weeks[1]} done: ` +
+               earlier.map(p => esc(p.title)).join(", ") + `</div></li>`);
+  document.getElementById("phases").innerHTML = items.join("");
+}
 if (cfg.plan_meta && cfg.plan_meta.guardrails)
   document.getElementById("planGuard").textContent = cfg.plan_meta.guardrails;
 
