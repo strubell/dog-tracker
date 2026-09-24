@@ -404,7 +404,7 @@
     </div>
     <div class="card" id="planCard">
       <h2 id="planHeading">The plan</h2>
-      <div class="sub">Distance is the primary metric, minutes a backup — keep the pace easy and sniffy even at target. <span id="planGuard"></span></div>
+      <div class="sub" id="planGuard"></div>
       <ol class="phases" id="phases"></ol>
     </div>
   </div>
@@ -419,7 +419,7 @@
     </div>
     <div class="card" id="planCardP">
       <h2 id="planHeadingP">The plan</h2>
-      <div class="sub" id="planSubP">Building toward the traverse — a midweek rocky loop and a weekend long hike each week.</div>
+      <div class="sub" id="planSubP"></div>
       <ol class="phases" id="pepperWeeks"></ol>
     </div>
   </div>
@@ -514,7 +514,7 @@ const weeklyGoalFor = dog => {
   const ph = phaseFor(planWeek);
   return (ph && ph.weekly_mi) || cfg.weekly_miles_target || null;
 };
-// the plan week (from a per-dog goal plan) that contains today — else nearest past, else week 1
+// the plan week (from a per-dog goal plan) that contains today — else nearest past, else null
 function planWeekNow(dog) {
   const plan = planFor(dog);
   if (!plan || !plan.weeks) return null;
@@ -525,9 +525,7 @@ function planWeekNow(dog) {
     if (ws && today >= ws && (!we || today <= we)) return { w, ws, we };
     if (ws && today >= ws) past = { w, ws, we };
   }
-  if (past) return past;
-  const [ws, we] = rng(plan.weeks[0].dates);
-  return { w: plan.weeks[0], ws, we };
+  return past;   // null before the plan starts: no weekly goal yet
 }
 // a plan week's weekly-TOTAL goal as [lo,hi] ranges (miles + elevation ft), or null
 function planTargets(w) {
@@ -578,11 +576,6 @@ function addDays(d, n) {
 }
 const thisMonday = mondayOf(today);
 const planWeek = Math.floor((today - planStart) / WEEK) + 1;
-// length of the structured plan = last bounded phase's end week (derived from
-// config, so adding/repeating a week just works)
-const planWeeks = cfg.plan_weeks
-  || Math.max(...cfg.phases.filter(p => p.weeks[1] != null).map(p => p.weeks[1]));
-const planDays = planWeeks * 7;
 const iso = d => d.toISOString().slice(0, 10);
 const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const fmtDay = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -864,10 +857,9 @@ function renderWeekly(dog) {
 function renderHeatmap(dog) {
   const isPrimary = dog === cfg.dog;
   const bd = aggFor(dog).byDay;
-  const preWeeks = 4;
-  const endWeek = Math.max(planWeeks, Math.min(planWeek, planWeeks + 4));
+  const preWeeks = 4, window = 12;     // show up to 12 weeks, ending with this one
   const rows = [];
-  for (let w = -preWeeks + 1; w <= endWeek; w++)
+  for (let w = Math.max(-preWeeks + 1, planWeek - window); w <= planWeek; w++)
     if (w !== 0) rows.push(w);          // w<=0 pre-plan, w>=1 plan weeks
   const circUnans = new Set((DATA.circles_unansweredByDog || {})[dog] || []);
   const cell = 26, gap = 2, top = 22, left = 56;   // room for date row labels
@@ -934,7 +926,10 @@ function renderElevHeatmap(dog) {
   const bd = aggFor(dog).byDay;
   const wk1 = plan && plan.weeks && plan.weeks[0] && plan.weeks[0].dates
     ? plan.weeks[0].dates.split("/")[0] : localISO(today);
-  const evt = plan && plan.goal && plan.goal.date ? plan.goal.date : localISO(today);
+  const lastWk = plan && plan.weeks && plan.weeks.length ? plan.weeks[plan.weeks.length - 1].dates : null;
+  const evt = plan && plan.goal && plan.goal.date ? plan.goal.date
+            : lastWk ? lastWk.split("/")[1] || lastWk.split("/")[0] : localISO(today);
+  const evtIsHike = !!(plan && plan.goal && plan.goal.date);
   const wk1Mon = mondayOf(new Date(wk1 + "T00:00:00"));
   const preWeeks = 3;
   const firstMon = addDays(wk1Mon, -preWeeks * 7);
@@ -968,7 +963,7 @@ function renderElevHeatmap(dog) {
            ` stroke-width="${+d === +today ? 1.5 : 1}"${future ? ' opacity="0.35"' : ""}${attrs}/>`;
     }
     if (isW1) s += `<text x="${left + 7 * (cell + gap) + 8}" y="${yr + cell / 2 + 4}" class="lbl">wk 1</text>`;
-    else if (isEvt) s += `<text x="${left + 7 * (cell + gap) + 8}" y="${yr + cell / 2 + 4}" class="lbl">the hike</text>`;
+    else if (isEvt && evtIsHike) s += `<text x="${left + 7 * (cell + gap) + 8}" y="${yr + cell / 2 + 4}" class="lbl">the hike</text>`;
   }
   s += `</svg>`;
   const el = document.getElementById("heatmapP"); el.innerHTML = s; bindTips(el);
@@ -986,6 +981,7 @@ function renderPepperPlan(dog) {
   const plan = planFor(dog);
   if (!plan) return;
   document.getElementById("planHeadingP").textContent = "Project Peak Pepper";
+  document.getElementById("planSubP").textContent = plan.subtitle || "";
   const range = s => {
     if (!s) return [null, null];
     const [a, b] = s.split("/");
@@ -994,6 +990,7 @@ function renderPepperPlan(dog) {
   const cur = planWeekNow(dog);   // current plan week, for highlighting (progress lives up top)
   const rMi = a => Array.isArray(a) ? `${a[0]}–${a[1]}` : `${a}`;
   const rFt = a => Array.isArray(a) ? `${a[0].toLocaleString()}–${a[1].toLocaleString()}` : `${(+a).toLocaleString()}`;
+  const miFt = o => `${rMi(o.mi)} mi${o.elev_ft ? ` / ${rFt(o.elev_ft)} ft` : ""}`;
 
   // ---- the weekly schedule (Nala-style: theme in the title, targets in the body) ----
   document.getElementById("pepperWeeks").innerHTML = plan.weeks.map(w => {
@@ -1008,13 +1005,15 @@ function renderPepperPlan(dog) {
       body = `Easy baseline walks, then the traverse — <b>${w.the_hike.mi} mi · ${w.the_hike.elev_ft.toLocaleString()} ft</b>`;
     } else if (w.total) {
       const m = w.midweek, l = w.long, sub = [];
-      if (m) sub.push(`Midweek loop ${rMi(m.mi)} mi / ${rFt(m.elev_ft)} ft`);
-      if (l) sub.push(`Long hike ${rMi(l.mi)} mi / ${rFt(l.elev_ft)} ft`);
-      body = `<b>Total: ${rMi(w.total.mi)} mi · ${rFt(w.total.elev_ft)} ft</b>` +
+      if (m) sub.push(`Midweek hills ${miFt(m)}`);
+      if (l) sub.push(`Long hike ${miFt(l)}` + (l.descent_ft_min ? ` · walked descent ≥${l.descent_ft_min.toLocaleString()} ft` : ""));
+      if (l && l.flag) sub.push(esc(l.flag));
+      body = `<b>Total: ${miFt(w.total)}</b>` +
              (sub.length ? `<div class="d" style="margin-top:2px">${sub.join("<br>")}</div>` : "");
     } else body = "";
     return `<li class="${now ? "now" : done ? "done" : ""}"><div class="ph-t">${label}</div><div class="ph-n">${body}</div></li>`;
-  }).join("");
+  }).join("") + (plan.after_week_12
+    ? `<li><div class="ph-t">After week ${plan.weeks.length}</div><div class="ph-n">${esc(plan.after_week_12)}</div></li>` : "");
 }
 
 // ---- weight charts --------------------------------------------------------------
@@ -1149,18 +1148,17 @@ function renderPepperPlan(dog) {
       [["all", "All time"], ["recent", "Recent"]].map(([mo, lbl]) =>
         `<button class="segbtn${weightMode === mo ? " on" : ""}" data-wmode="${mo}">${lbl}</button>`).join("");
     if (weightMode === "recent") {
-      const mile1 = planWeeks, mile2 = planWeeks + 8;
       const rx0 = +addDays(planStart, -7);
-      const rx1 = isPrimary ? +addDays(planStart, (mile2 + 1) * 7) : +addDays(today, 30);
+      const rx1 = +addDays(today, 30);
       const rpts = pts.filter(e => T0(e.date) >= rx0);
-      const ticks = isPrimary ? [
-        { t: +planStart, label: "start" },
-        { t: +addDays(planStart, mile1 * 7), label: `wk ${mile1}`, line: true },
-        { t: +addDays(planStart, mile2 * 7), label: `wk ${mile2}`, line: true },
-      ] : monthTicks(rx0, rx1);
+      // primary dog: plan start plus each later phase's first week as a milestone line
+      const ticks = isPrimary ? [{ t: +planStart, label: "start" }].concat(
+        cfg.phases.filter(p => p.weeks[0] > 1)
+          .map(p => ({ t: +addDays(planStart, (p.weeks[0] - 1) * 7), label: `wk ${p.weeks[0]}`, line: true })))
+        : monthTicks(rx0, rx1);
       drawWeight("weightHist", [{ name: dog, pts: rpts }], [{ t0: rx0, t1: rx1 }], ticks, bands);
       document.getElementById("weightSub").textContent = isPrimary
-        ? `Plan window · re-weigh every 2–4 weeks · milestones at wk ${mile1} and ${mile2}`
+        ? "Since plan start · lines mark phase changes"
         : "Recent weigh-ins";
     } else {
       const spans = historySpans(pts);
