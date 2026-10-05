@@ -893,13 +893,22 @@ def _med_courses(path):
 
 
 def log_med(dog, d, skip=None, add=None):
-    """Set a day's medication log: skip = daily-med names not given; add = ad-hoc meds."""
+    """Set a day's medication log: skip = daily-med names not given (replaces);
+    add = ad-hoc meds given (merged into what is already logged, so a stale
+    page saving a skip can't drop a dose logged from elsewhere)."""
     store = load(MED_LOG, {})
     day = store.setdefault(dog, {}).setdefault(d, {})
     if skip is not None:
         day["skip"] = skip
     if add is not None:
-        day["add"] = add
+        have = day.get("add") or []
+        key = lambda a: ((a.get("name") or "").strip().lower(), (a.get("dose") or "").strip().lower())
+        seen = {key(a) for a in have}
+        for a in add:
+            if key(a) not in seen:
+                have.append(a)
+                seen.add(key(a))
+        day["add"] = have
     if not day.get("skip") and not day.get("add"):
         store[dog].pop(d, None)
     save(MED_LOG, store)
