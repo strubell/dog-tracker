@@ -1037,10 +1037,7 @@ function renderPepperPlan(dog) {
 
   // spans: [{t0, t1, share}] — one span is a plain time axis; several make a broken
   // axis, each span getting `share` of the plot width with a small gap between
-  // opts.smooth: draw a monotone curve through the points instead of straight segments;
-  // opts.thin: hide markers closer than this many px to the previous shown one (first and
-  // last always shown); hidden points keep an invisible hit target so the tooltip still works
-  function drawWeight(elId, seriesList, spans, ticks, bands, opts = {}) {
+  function drawWeight(elId, seriesList, spans, ticks, bands) {
     const W = 460, H = 240, L = 36, R = 14, T = 12, B = 26, GAP = 16;
     const plotW = W - L - R, plotH = H - T - B, base = T + plotH;
     const usable = plotW - GAP * (spans.length - 1);
@@ -1094,23 +1091,14 @@ function renderPepperPlan(dog) {
         } else d += (d ? " L" : "M") + pt;
         prev = { sg, x: X(t), y: Y(e.lb) };
       }
-      if (opts.smooth && segs.length === 1 && ser.pts.length > 2)
-        d = monotonePath(ser.pts.map(e => [X(T0(e.date)), Y(e.lb)]));
       if (ser.pts.length > 1)
         s += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
-      let lastShown = -Infinity;
-      ser.pts.forEach((e, i) => {
+      for (const e of ser.pts) {
         const who = seriesList.length > 1 ? `${ser.name} · ` : "";
         const t = `<b>${who}${e.date}</b>${e.lb.toFixed(1)} lb${e.note ? "<br>" + esc(e.note) : ""}`;
-        const cx = X(T0(e.date)), cy = Y(e.lb);
-        const show = !opts.thin || i === 0 || i === ser.pts.length - 1 || cx - lastShown >= opts.thin;
-        if (show) {
-          lastShown = cx;
-          s += `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${color}"` +
-               ` stroke="var(--surface)" stroke-width="2" data-tip="${esc(t)}"/>`;
-        } else
-          s += `<circle cx="${cx}" cy="${cy}" r="5" fill="transparent" data-tip="${esc(t)}"/>`;
-      });
+        s += `<circle cx="${X(T0(e.date))}" cy="${Y(e.lb)}" r="4.5" fill="${color}"` +
+             ` stroke="var(--surface)" stroke-width="2" data-tip="${esc(t)}"/>`;
+      }
     }
     segs.forEach((sg, i) => {
       s += `<line x1="${sg.p0}" x2="${sg.p1}" y1="${base}" y2="${base}" stroke="var(--axis)"/>`;
@@ -1122,26 +1110,6 @@ function renderPepperPlan(dog) {
     s += `</svg>`;
     const el = document.getElementById(elId);
     el.innerHTML = s; bindTips(el);
-  }
-
-  // monotone cubic through [x,y] points (x ascending): smooth, no overshoot between points
-  function monotonePath(P) {
-    const n = P.length, dx = [], dy = [], m = [];
-    for (let i = 0; i < n - 1; i++) { dx.push(P[i + 1][0] - P[i][0]); dy.push(P[i + 1][1] - P[i][1]); m.push(dx[i] ? dy[i] / dx[i] : 0); }
-    const t = [m[0]];
-    for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
-    t.push(m[n - 2]);
-    for (let i = 0; i < n - 1; i++) {
-      if (!m[i]) { t[i] = t[i + 1] = 0; continue; }
-      const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
-      if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
-    }
-    let d = `M${P[0][0]},${P[0][1]}`;
-    for (let i = 0; i < n - 1; i++) {
-      const h = dx[i] / 3;
-      d += ` C${P[i][0] + h},${P[i][1] + h * t[i]} ${P[i + 1][0] - h},${P[i + 1][1] - h * t[i + 1]} ${P[i + 1][0]},${P[i + 1][1]}`;
-    }
-    return d;
   }
 
   // history window: everything known, padded; year ticks (or months if short)
@@ -1165,6 +1133,26 @@ function renderPepperPlan(dog) {
       t.push({ t: +m, label: m.toLocaleDateString(undefined, { month: "short" }) });
     return t;
   };
+  // For the single-axis view: the sparse history is kept as is; inside the dense tail
+  // (weigh-ins ≤45 days apart) keep one point per ~minGap px of axis, plus the last one.
+  function thinTail(pts, x0, x1, minGap) {
+    const px = t => 410 * (t - x0) / (x1 - x0);   // ≈ plot width in viewBox units
+    let i = pts.length - 1;
+    while (i > 0 && T0(pts[i].date) - T0(pts[i - 1].date) <= 45 * DAY) i--;
+    if (pts.length - i < 4) return pts;
+    const head = pts.slice(0, i), tail = pts.slice(i), kept = [];
+    let last = -Infinity;
+    for (const e of tail) {
+      const x = px(T0(e.date));
+      if (x - last >= minGap) { kept.push(e); last = x; }
+    }
+    const end = tail[tail.length - 1];
+    if (kept[kept.length - 1] !== end) {
+      if (kept.length > 1 && px(T0(end.date)) - px(T0(kept[kept.length - 1].date)) < minGap / 2) kept.pop();
+      kept.push(end);
+    }
+    return head.concat(kept);
+  }
   // Weigh-ins used to be yearly and are now weekly, so one linear axis piles the
   // recent ones into a few pixels. When there's a dense tail (4+ points no more
   // than 45 days apart) that would get under 30% of the axis, break the axis and
@@ -1186,7 +1174,7 @@ function renderPepperPlan(dog) {
     const bands = target
       ? [{ lo: target[0], hi: target[1], below: true, label: `target ${target[0]}–${target[1]} lb` }] : [];
     document.getElementById("weightToggle").innerHTML =
-      [["all", "All time"], ["linear", "One axis"], ["recent", "Recent"]].map(([mo, lbl]) =>
+      [["all", "Summary"], ["linear", "All time"], ["recent", "Recent"]].map(([mo, lbl]) =>
         `<button class="segbtn${weightMode === mo ? " on" : ""}" data-wmode="${mo}">${lbl}</button>`).join("");
     if (weightMode === "recent") {
       const rx0 = +addDays(planStart, -7);
@@ -1202,16 +1190,19 @@ function renderPepperPlan(dog) {
         ? "Since plan start · lines mark phase changes"
         : "Recent weigh-ins";
     } else if (weightMode === "linear") {
-      drawWeight("weightHist", [{ name: dog, pts }], [{ t0: hx0, t1: hx1 }], hTicks, bands, { smooth: true, thin: 9 });
-      document.getElementById("weightSub").textContent = "All known weigh-ins on one time axis · smoothed, markers thinned where they crowd";
+      const shown = thinTail(pts, hx0, hx1, 14);
+      drawWeight("weightHist", [{ name: dog, pts: shown }], [{ t0: hx0, t1: hx1 }], hTicks, bands);
+      document.getElementById("weightSub").textContent = shown.length < pts.length
+        ? `All known weigh-ins · ${pts.length - shown.length} of the recent frequent ones left out for legibility`
+        : "All known weigh-ins";
     } else {
       const spans = historySpans(pts);
       const broken = spans.length > 1;
       const ticks = broken ? hTicks.concat(monthTicks(spans[1].t0, spans[1].t1)) : hTicks;
       drawWeight("weightHist", [{ name: dog, pts }], spans, ticks, bands);
       document.getElementById("weightSub").textContent = broken
-        ? "All known weigh-ins · axis breaks so the recent weigh-ins have room"
-        : "All known weigh-ins";
+        ? "Every weigh-in · axis breaks so the recent ones have room"
+        : "Every weigh-in";
     }
     document.getElementById("weightToggle").querySelectorAll("[data-wmode]").forEach(b =>
       b.onclick = () => { weightMode = b.dataset.wmode; renderWeightHistory(dog); });
