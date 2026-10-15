@@ -2034,9 +2034,13 @@ if (DATA.live) {
     return `<span class="d">${a.date.slice(0, 10)}</span>${esc(a.name)}` +
            `<span class="d"> · ${esc(a.type)} · ${a.min} min · ${a.mi.toFixed(1)} mi</span>${flag}`;
   };
+  // "today" is taken at the moment of asking, not at page load: a tab left open
+  // overnight would otherwise call yesterday "today" and label today by its date
   const circleInfo = (k) => {
-    const isToday = k === todayISO;
-    return `<span class="d">${isToday ? "Today" : fmtISO(k)}</span>Circle walk${isToday ? " today" : ""}?`;
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const isToday = k === localISO(now), isYday = k === localISO(addDays(now, -1));
+    const when = isToday ? "Today" : isYday ? `Yesterday, ${fmtISO(k)}` : fmtISO(k);
+    return `<span class="d">${when}</span>Circle walk${isToday ? " today" : ""}?`;
   };
 
   // one row per activity/circle; tap the dogs that came (color in), or Neither
