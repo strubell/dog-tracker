@@ -224,6 +224,9 @@
               letter-spacing: .03em; margin-bottom: 2px; }
   .treats-h .d { text-transform: none; font-weight: 400; letter-spacing: 0; }
   .treats ul.notes .d { margin-right: 0; }
+  details.pasttreats { margin-top: 4px; }
+  details.pasttreats ul.notes { margin-top: 4px; }
+  details.pasttreats li, details.pasttreats li details.ing > summary { color: var(--ink-muted); }
   .ingsum { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
   .ingsum-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
               color: var(--ink-2); margin-bottom: 6px; }
@@ -1346,7 +1349,9 @@ function renderFood(dog) {
   const curRev = revisions.filter(r => !r.from || r.from <= localISO(today)).slice(-1)[0]
     || revisions[revisions.length - 1] || { items: [] };
   const feed = curRev.items || [];
-  const treats = (cfg.treats || {})[dog] || [];
+  const allTreats = (cfg.treats || {})[dog] || [];
+  const treats = allTreats.filter(t => !t.past);        // current
+  const pastTreats = allTreats.filter(t => t.past);     // tolerated, not currently given
   const logItems = (cfg.daily_log || {})[dog] || [];
   const meals = mealsFor(dog);
   const frac = c => ({ "0.25": "¼", "0.33": "⅓", "0.50": "½", "0.67": "⅔", "0.75": "¾" })[c.toFixed(2)] || c;
@@ -1363,10 +1368,16 @@ function renderFood(dog) {
     const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup` : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
     return ingRow(`${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span>`, it.ingredients);
   }).join("");
-  const treatRows = treats.map(t =>
-    ingRow(`${esc(t.item)}${t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : ""}`, t.ingredients)).join("");
-  const treatBlock = treats.length
-    ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div><ul class="notes">${treatRows}</ul></div>` : "";
+  const treatRow = t =>
+    ingRow(`${esc(t.item)}${t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : ""}`, t.ingredients);
+  const treatRows = treats.map(treatRow).join("");
+  // treats she tolerated but isn't getting now, tucked behind a summary
+  const pastBlock = pastTreats.length
+    ? `<details class="tv pasttreats"><summary>Past treats (${pastTreats.length}) — well tolerated</summary>` +
+      `<ul class="notes">${pastTreats.map(treatRow).join("")}</ul></details>` : "";
+  const treatBlock = treats.length || pastTreats.length
+    ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div>` +
+      (treats.length ? `<ul class="notes">${treatRows}</ul>` : "") + pastBlock + `</div>` : "";
   const rationBlock =
     `<div style="margin-bottom:6px"><span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
     `<span class="sub">${Math.round(kcal)} kcal/day</span></div><ul class="notes">${rows}</ul>${treatBlock}`;
