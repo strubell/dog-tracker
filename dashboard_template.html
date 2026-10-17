@@ -1358,8 +1358,9 @@ function renderFood(dog) {
   // standing daily meds that carry calories (e.g. the joint softgels) count toward
   // the ration; a day the log marks skipped contributes nothing
   const medLog = ((DATA.meds || {})[dog] || {}).log || {};
+  // a declared kcal (even 0) opts a daily med into the supplements list
   const kcalMedsOn = iso => (((cfg.profiles || {})[dog] || {}).daily_medications || [])
-    .filter(m => m.kcal && (!m.start || m.start <= iso) && (!m.end || m.end >= iso));
+    .filter(m => m.kcal != null && (!m.start || m.start <= iso) && (!m.end || m.end >= iso));
   const medKcalOn = iso => {
     const skip = new Set((medLog[iso] || {}).skip || []);
     return kcalMedsOn(iso).filter(m => !skip.has(m.name))
