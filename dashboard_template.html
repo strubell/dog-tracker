@@ -1376,7 +1376,7 @@ function renderFood(dog) {
   const ingRow = (head, ingredients) => ingredients
     ? `<li><details class="ing"><summary>${head}</summary><div class="ingfull">${esc(ingredients)}</div></details></li>`
     : `<li>${head}</li>`;
-  const rows = feed.map(it => {
+  const rows = feed.filter(it => !it.supplement).map(it => {
     const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
     const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup` : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
     return ingRow(`${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span>`, it.ingredients);
@@ -1388,11 +1388,17 @@ function renderFood(dog) {
   const pastBlock = pastTreats.length
     ? `<details class="tv pasttreats"><summary>Past treats (${pastTreats.length}) — well tolerated</summary>` +
       `<ul class="notes">${pastTreats.map(treatRow).join("")}</ul></details>` : "";
-  const medBlock = kcalMeds.length
-    ? `<div class="treats"><div class="treats-h">Supplements <span class="d">(counted)</span></div><ul class="notes">` +
-      kcalMeds.map(m => ingRow(
-        `${(m.per_day || 1) > 1 ? `${m.per_day}× ` : ""}${esc(m.name)}${m.dose ? ` — ${esc(m.dose)}` : ""}` +
-        ` <span class="d">(${m.kcal} kcal each)</span>`, m.ingredients)).join("") + `</ul></div>` : "";
+  // supplements: calorie-bearing daily meds plus ration items flagged as supplements.
+  // A kcal note is shown only when it rounds to something.
+  const kcalNote = (k, each) => k ? ` <span class="d">(${k} kcal${each ? " each" : ""})</span>` : "";
+  const suppRows = kcalMeds.map(m => ingRow(
+      `${(m.per_day || 1) > 1 ? `${m.per_day}× ` : ""}${esc(m.name)}${m.dose ? ` — ${esc(m.dose)}` : ""}` +
+      kcalNote(m.kcal, (m.per_day || 1) > 1), m.ingredients))
+    .concat(feed.filter(it => it.supplement).map(it => ingRow(
+      `${(it.per_day || 1) > 1 ? `${it.per_day}× ` : ""}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""}` +
+      kcalNote(it.kcal, (it.per_day || 1) > 1), it.ingredients)));
+  const medBlock = suppRows.length
+    ? `<div class="treats"><div class="treats-h">Supplements</div><ul class="notes">${suppRows.join("")}</ul></div>` : "";
   const treatBlock = treats.length || pastTreats.length
     ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div>` +
       (treats.length ? `<ul class="notes">${treatRows}</ul>` : "") + pastBlock + `</div>` : "";
