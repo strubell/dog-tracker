@@ -1355,9 +1355,22 @@ function renderFood(dog) {
   const logItems = (cfg.daily_log || {})[dog] || [];
   const meals = mealsFor(dog);
   const frac = c => ({ "0.25": "¼", "0.33": "⅓", "0.50": "½", "0.67": "⅔", "0.75": "¾" })[c.toFixed(2)] || c;
+  // standing daily meds that carry calories (e.g. the joint softgels) count toward
+  // the ration; a day the log marks skipped contributes nothing
+  const medLog = ((DATA.meds || {})[dog] || {}).log || {};
+  const kcalMedsOn = iso => (((cfg.profiles || {})[dog] || {}).daily_medications || [])
+    .filter(m => m.kcal && (!m.start || m.start <= iso) && (!m.end || m.end >= iso));
+  const medKcalOn = iso => {
+    const skip = new Set((medLog[iso] || {}).skip || []);
+    return kcalMedsOn(iso).filter(m => !skip.has(m.name))
+      .reduce((t, m) => t + (m.per_day || 1) * m.kcal, 0);
+  };
 
   // ----- current ration + treats -----
-  const kcal = feed.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0);
+  const todayISOf = localISO(today);
+  const kcalMeds = kcalMedsOn(todayISOf);
+  const kcal = feed.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0)
+             + kcalMeds.reduce((t, m) => t + (m.per_day || 1) * m.kcal, 0);
   // a row is a plain <li>, or — if the item lists ingredients — a click-to-expand
   // <details> revealing the full ingredient list
   const ingRow = (head, ingredients) => ingredients
@@ -1375,12 +1388,17 @@ function renderFood(dog) {
   const pastBlock = pastTreats.length
     ? `<details class="tv pasttreats"><summary>Past treats (${pastTreats.length}) — well tolerated</summary>` +
       `<ul class="notes">${pastTreats.map(treatRow).join("")}</ul></details>` : "";
+  const medBlock = kcalMeds.length
+    ? `<div class="treats"><div class="treats-h">Supplements <span class="d">(counted)</span></div><ul class="notes">` +
+      kcalMeds.map(m => ingRow(
+        `${(m.per_day || 1) > 1 ? `${m.per_day}× ` : ""}${esc(m.name)}${m.dose ? ` — ${esc(m.dose)}` : ""}` +
+        ` <span class="d">(${m.kcal} kcal each)</span>`, m.ingredients)).join("") + `</ul></div>` : "";
   const treatBlock = treats.length || pastTreats.length
     ? `<div class="treats"><div class="treats-h">Treats <span class="d">(not counted)</span></div>` +
       (treats.length ? `<ul class="notes">${treatRows}</ul>` : "") + pastBlock + `</div>` : "";
   const rationBlock =
     `<div style="margin-bottom:6px"><span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>` +
-    `<span class="sub">${Math.round(kcal)} kcal/day</span></div><ul class="notes">${rows}</ul>${treatBlock}`;
+    `<span class="sub">${Math.round(kcal)} kcal/day</span></div><ul class="notes">${rows}</ul>${medBlock}${treatBlock}`;
 
   // ----- daily log calendar (per-dog items; unlogged "assume" items count as done) -----
   const total = logItems.length;
@@ -1475,7 +1493,7 @@ function renderFood(dog) {
     const boneK = (bone && log.dental !== false) ? (bone.kcal || 0) : 0;
     const otherK = its.filter(it => !isMealFood(it) && it !== bone)  // powder, pill buddies — always given
       .reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? (it.cups || 0) * (it.kcal_per_cup || 0)), 0);
-    return food + boneK + otherK;
+    return food + boneK + otherK + medKcalOn(iso);
   };
   let dietBlock = "";
   if (revisions.length) {
