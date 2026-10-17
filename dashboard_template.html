@@ -1392,8 +1392,11 @@ function renderFood(dog) {
   // supplements: calorie-bearing daily meds plus ration items flagged as supplements.
   // A kcal note is shown only when it rounds to something.
   const kcalNote = (k, each) => k ? ` <span class="d">(${k} kcal${each ? " each" : ""})</span>` : "";
+  // a med may carry its own display label (the log keys off `name`, which can be a
+  // short action like "Tooth brushing" that reads oddly in a product list)
   const suppRows = kcalMeds.map(m => ingRow(
-      `${(m.per_day || 1) > 1 ? `${m.per_day}× ` : ""}${esc(m.name)}${m.dose ? ` — ${esc(m.dose)}` : ""}` +
+      `${(m.per_day || 1) > 1 ? `${m.per_day}× ` : ""}` +
+      (m.label ? esc(m.label) : `${esc(m.name)}${m.dose ? ` — ${esc(m.dose)}` : ""}`) +
       kcalNote(m.kcal, (m.per_day || 1) > 1), m.ingredients))
     .concat(feed.filter(it => it.supplement).map(it => ingRow(
       `${(it.per_day || 1) > 1 ? `${it.per_day}× ` : ""}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""}` +
