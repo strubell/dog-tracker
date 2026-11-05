@@ -1448,7 +1448,8 @@ function renderFood(dog) {
               const kc = (!ok && p.it.kcal) ? ` (−${p.it.kcal} kcal)` : "";
               return `${esc(p.it.label)}: ${ok ? "✓" : "✗ skipped" + kc}`;
             }).join(" · ");
-        if (rec && rec.other) t += `<br>◆ ${esc(rec.other)}`;
+        if (rec && rec.other)
+          t += `<br>◆ ${esc(rec.other)}${rec.other_kcal ? ` (+${rec.other_kcal} kcal)` : ""}`;
         attrs = ` data-tip="${esc(t)}" data-iso="${k}" class="eatcell${+d === +today ? " sel" : ""}"`;   // clickable to edit; today selected by default
       }
       svg += `<rect x="${x}" y="${yr}" width="${cell}" height="${cell}" rx="4" fill="${fill}"` +
@@ -1503,7 +1504,7 @@ function renderFood(dog) {
     const boneK = (bone && log.dental !== false) ? (bone.kcal || 0) : 0;
     const otherK = its.filter(it => !isMealFood(it) && it !== bone)  // powder, pill buddies — always given
       .reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? (it.cups || 0) * (it.kcal_per_cup || 0)), 0);
-    return food + boneK + otherK + medKcalOn(iso);
+    return food + boneK + otherK + medKcalOn(iso) + (log.other_kcal || 0);
   };
   let dietBlock = "";
   if (revisions.length) {
@@ -1577,11 +1578,15 @@ function renderFood(dog) {
           const skipped = rec[it.key] === false;   // was skipped → click sets back to yes; else marks skipped
           return `<button class="eatchip${skipped ? " off" : ""}" data-key="${it.key}" data-skipped="${skipped}">${esc(it.label)}</button>`;
         }).join("") +
-        `<span class="mgrp"><input class="foodOther" placeholder="different/new food…" value="${esc(rec.other || "")}" style="width:150px"><button class="btn foodOtherBtn">Log</button></span>`;
+        `<span class="mgrp"><input class="foodOther" placeholder="different/new food…" value="${esc(rec.other || "")}" style="width:150px">` +
+        `<input class="foodOtherK" type="number" min="0" step="1" placeholder="kcal" value="${rec.other_kcal ?? ""}" style="width:64px">` +
+        `<button class="btn foodOtherBtn">Log</button></span>`;
       el.querySelectorAll(".eatchip").forEach(b =>
         b.onclick = () => window.logMeal(dog, { date: iso, [b.dataset.key]: b.dataset.skipped === "true" }));
       const ob = el.querySelector(".foodOtherBtn");
-      if (ob) ob.onclick = () => window.logMeal(dog, { date: iso, other: el.querySelector(".foodOther").value.trim() });
+      if (ob) ob.onclick = () => window.logMeal(dog, { date: iso,
+        other: el.querySelector(".foodOther").value.trim(),
+        other_kcal: el.querySelector(".foodOtherK").value.trim() });
     };
     paintMealCtl(localISO(today));
     eatBody.querySelectorAll("rect.eatcell").forEach(r => r.onclick = () => {
@@ -2216,7 +2221,7 @@ if (DATA.live) {
   const petDog = dogList.find(d => d !== cfg.dog);
 
   // daily eating-log entry — the unified card's controls (built per dog in
-  // renderFood) call this; patch = {itemKey: bool} or {other: text}
+  // renderFood) call this; patch = {itemKey: bool} or {other: text, other_kcal: num}
   window.logMeal = async (dog, patch) => {
     try {
       await post("/api/meal", { dog, ...patch });
@@ -2336,11 +2341,14 @@ if (DATA.live) {
         : `<div class="d">Nothing tracked.</div>`) +
       `<div class="mgrp" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">` +
       `<input id="foodEdOther" placeholder="different/new food…" value="${esc(rec.other || "")}" style="width:160px">` +
+      `<input id="foodEdOtherK" type="number" min="0" step="1" placeholder="kcal" value="${rec.other_kcal ?? ""}" style="width:70px">` +
       `<button class="btn primary" id="foodEdSave">Save</button>` +
       `<button class="btn" id="foodEdCancel">Cancel</button></div>`;
     document.getElementById("foodEdCancel").onclick = () => ed.classList.add("hide");
     document.getElementById("foodEdSave").onclick = async () => {
-      const patch = { dog, date: iso, other: document.getElementById("foodEdOther").value.trim() };
+      const patch = { dog, date: iso,
+        other: document.getElementById("foodEdOther").value.trim(),
+        other_kcal: document.getElementById("foodEdOtherK").value.trim() };
       ed.querySelectorAll(".ate").forEach(c => { patch[c.dataset.key] = c.checked; });
       try {
         await post("/api/meal", patch);

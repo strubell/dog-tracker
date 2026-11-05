@@ -598,11 +598,13 @@ def cmd_circle(args):
 
 # ---------------------------------------------------------------- meals
 
-def log_meal(dog, d, items=None, other=None):
+def log_meal(dog, d, items=None, other=None, other_kcal=None):
     """Record a dog's daily-log items for a day. items: {key: True (ate/given),
     False (skipped), or None (leave unchanged)} — keys are per-dog daily_log
     items (e.g. breakfast/dinner for Pepper, dental for Nala). other: any
-    different/new food (empty string clears it, None leaves unchanged)."""
+    different/new food (empty string clears it, None leaves unchanged).
+    other_kcal: calories for that one-off food, counted in the day's total
+    ("" or 0 clears it, None leaves unchanged; clearing `other` clears it too)."""
     store = load(MEALS, {})
     day = store.setdefault(dog, {}).setdefault(d, {})
     for k, v in (items or {}).items():
@@ -614,6 +616,16 @@ def log_meal(dog, d, items=None, other=None):
             day["other"] = o
         else:
             day.pop("other", None)
+            day.pop("other_kcal", None)      # no food, no calories
+    if other_kcal is not None and day.get("other"):
+        try:
+            k = float(str(other_kcal).strip() or 0)
+        except ValueError:
+            raise ValueError("other_kcal must be a number")
+        if k:
+            day["other_kcal"] = int(k) if k == int(k) else k
+        else:
+            day.pop("other_kcal", None)
     save(MEALS, store)
     return day
 
@@ -630,10 +642,14 @@ def cmd_meal(args):
         items[args.ate] = True         # any daily_log item (e.g. dental)
     if args.skip:
         items[args.skip] = False
-    day = log_meal(dog, _date_arg(args), items, args.other)
+    day = log_meal(dog, _date_arg(args), items, args.other, args.other_kcal)
     logged = ", ".join(f"{k}={'y' if v else 'n'}" for k, v in items.items())
-    print(f"{dog} on {_date_arg(args)}: {logged or 'no change'}"
-          + (f" · other: {day['other']}" if day.get("other") else ""))
+    extra = ""
+    if day.get("other"):
+        extra = f" · other: {day['other']}"
+        if day.get("other_kcal"):
+            extra += f" ({day['other_kcal']} kcal)"
+    print(f"{dog} on {_date_arg(args)}: {logged or 'no change'}" + extra)
     cmd_build(args)
 
 
@@ -1405,8 +1421,9 @@ def cmd_serve(args):
                 if self.path == "/api/meal":
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
                     items = {k: v for k, v in body.items()
-                             if k not in ("dog", "date", "other")}
-                    log_meal(body["dog"], d, items, body.get("other"))
+                             if k not in ("dog", "date", "other", "other_kcal")}
+                    log_meal(body["dog"], d, items, body.get("other"),
+                             body.get("other_kcal"))
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/gi":
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
@@ -1516,6 +1533,8 @@ def main():
     s.add_argument("--ate", metavar="ITEM", help="mark a daily_log item given/eaten (e.g. dental)")
     s.add_argument("--skip", metavar="ITEM", help="mark a daily_log item skipped/not given (e.g. dental)")
     s.add_argument("--other", help="any different/new food eaten (blank clears)")
+    s.add_argument("--other-kcal", dest="other_kcal", metavar="KCAL",
+                   help="calories for that one-off food, counted in the day's total (0 clears)")
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
     s.set_defaults(func=cmd_meal)
 
