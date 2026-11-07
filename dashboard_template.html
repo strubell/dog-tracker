@@ -1349,6 +1349,27 @@ function renderFood(dog) {
   const curRev = revisions.filter(r => !r.from || r.from <= localISO(today)).slice(-1)[0]
     || revisions[revisions.length - 1] || { items: [] };
   const feed = curRev.items || [];
+  // a revision can start at a specific meal (from_meal), so a mid-day food swap is
+  // exact: each meal draws on the ration in effect *at that meal*, not just that day.
+  const MEAL_ORDER = ["breakfast", "dinner"];   // meals in the order they happen
+  const mealIdx = m => { const i = MEAL_ORDER.indexOf(m); return i < 0 ? 0 : i; };
+  const revAtMeal = (iso, mi) => {
+    let best = revisions[0];
+    for (const r of revisions) {
+      const rd = r.from || "", rmi = r.from_meal ? mealIdx(r.from_meal) : 0;
+      if (!r.from || rd < iso || (rd === iso && rmi <= mi)) best = r;
+    }
+    return best;
+  };
+  const revAt = iso => revAtMeal(iso, MEAL_ORDER.length - 1);   // ration in effect by day's end
+  // the ration item a daily-log entry stands for (`log_key`; older revisions are
+  // matched by name), so its calories come from the ration in force that day
+  const logItemOn = (key, iso) => {
+    const its = (revAt(iso) || {}).items || [];
+    return its.find(it => it.log_key === key)
+        || (key === "dental" ? its.find(it => /dental (bone|chew)/i.test(it.item || "")) : null);
+  };
+  const logItemKcal = (it, iso) => { const r = logItemOn(it.key, iso); return r ? (r.kcal ?? 0) : it.kcal; };
   const allTreats = (cfg.treats || {})[dog] || [];
   const treats = allTreats.filter(t => !t.past);        // current
   const pastTreats = allTreats.filter(t => t.past);     // tolerated, not currently given
@@ -1438,14 +1459,15 @@ function renderFood(dog) {
     svg += `<text x="${left - 8}" y="${yr + cell / 2 + 4}" text-anchor="end" class="${curWk ? "lbl" : ""}" ${curWk ? 'font-weight="600"' : ""}>${fmtDay(mon)}</text>`;
     for (let i = 0; i < 7; i++) {
       const d = addDays(mon, i), k = localISO(d), x = left + i * (cell + gap);
-      const future = d > today, rec = meals[k], st = dayStatus(rec, k);
+      const k0 = k, future = d > today, rec = meals[k], st = dayStatus(rec, k);
       const fill = future ? "var(--surface)" : eatColor(st.frac);
       let attrs = "";
       if (!future) {
         let t = st.frac === null ? `<b>${fmtDay(d)}</b>${k < cfg.plan_start ? "before the plan — unlogged" : "not logged"}`
           : `<b>${fmtDay(d)}</b>` + st.parts.map(p => {
               const ok = p.st === "yes" || p.st === "def";
-              const kc = (!ok && p.it.kcal) ? ` (−${p.it.kcal} kcal)` : "";
+              const k = logItemKcal(p.it, k0);
+              const kc = (!ok && k) ? ` (−${k} kcal)` : "";
               return `${esc(p.it.label)}: ${ok ? "✓" : "✗ skipped" + kc}`;
             }).join(" · ");
         if (rec && rec.other)
@@ -1476,19 +1498,6 @@ function renderFood(dog) {
 
   // ----- actual calories/day over time: ration in effect each day, minus the
   // meals/bone the eating log records as skipped (so skip days dip accurately) -----
-  // a revision can start at a specific meal (from_meal), so a mid-day food swap is
-  // exact: each meal draws on the ration in effect *at that meal*, not just that day.
-  const MEAL_ORDER = ["breakfast", "dinner"];   // meals in the order they happen
-  const mealIdx = m => { const i = MEAL_ORDER.indexOf(m); return i < 0 ? 0 : i; };
-  const revAtMeal = (iso, mi) => {
-    let best = revisions[0];
-    for (const r of revisions) {
-      const rd = r.from || "", rmi = r.from_meal ? mealIdx(r.from_meal) : 0;
-      if (!r.from || rd < iso || (rd === iso && rmi <= mi)) best = r;
-    }
-    return best;
-  };
-  const revAt = iso => revAtMeal(iso, MEAL_ORDER.length - 1);   // ration in effect by day's end
   const isMealFood = it => it.cups && it.kcal_per_cup;   // a per-meal, cup-measured food
   const foodMealK = rev =>                                // sum of ALL per-meal foods (kibble + bland, etc.)
     (rev.items || []).filter(isMealFood).reduce((t, it) => t + it.cups * it.kcal_per_cup, 0);
@@ -1500,9 +1509,9 @@ function renderFood(dog) {
     MEAL_ORDER.forEach((m, i) => { if (log[m] !== false) food += foodMealK(revAtMeal(iso, i)); });
     // once-a-day extras (bone, powder, pills) come from the ration in effect at day's end
     const its = (revAt(iso).items || []);
-    const bone = its.find(it => /dental bone/i.test(it.item || ""));
+    const bone = logItemOn("dental", iso);
     const boneK = (bone && log.dental !== false) ? (bone.kcal || 0) : 0;
-    const otherK = its.filter(it => !isMealFood(it) && it !== bone)  // powder, pill buddies — always given
+    const otherK = its.filter(it => !isMealFood(it) && it !== bone)  // powder, pill buddies, chews — always given
       .reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? (it.cups || 0) * (it.kcal_per_cup || 0)), 0);
     return food + boneK + otherK + medKcalOn(iso) + (log.other_kcal || 0);
   };
