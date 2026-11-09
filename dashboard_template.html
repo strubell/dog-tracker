@@ -1362,6 +1362,12 @@ function renderFood(dog) {
     return best;
   };
   const revAt = iso => revAtMeal(iso, MEAL_ORDER.length - 1);   // ration in effect by day's end
+  // a cup-measured food is the same at every meal unless it names per-meal amounts
+  const MEAL_SHORT = { breakfast: "AM", dinner: "PM" };
+  const cupsAt = (it, meal) => it.cups_by_meal ? (it.cups_by_meal[meal] || 0) : (it.cups || 0);
+  const cupsDay = it => it.cups_by_meal
+    ? MEAL_ORDER.reduce((t, m) => t + (it.cups_by_meal[m] || 0), 0)
+    : (it.cups || 0) * (it.per_day || 1);
   // the ration item a daily-log entry stands for (`log_key`; older revisions are
   // matched by name), so its calories come from the ration in force that day
   const logItemOn = (key, iso) => {
@@ -1391,7 +1397,8 @@ function renderFood(dog) {
   // ----- current ration + treats -----
   const todayISOf = localISO(today);
   const kcalMeds = kcalMedsOn(todayISOf);
-  const kcal = feed.reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? it.cups * it.kcal_per_cup), 0)
+  const kcal = feed.reduce((t, it) => t + (it.kcal_per_cup ? cupsDay(it) * it.kcal_per_cup
+                                                              : (it.per_day || 1) * (it.kcal || 0)), 0)
              + kcalMeds.reduce((t, m) => t + (m.per_day || 1) * m.kcal, 0);
   // a row is a plain <li>, or — if the item lists ingredients — a click-to-expand
   // <details> revealing the full ingredient list
@@ -1399,9 +1406,12 @@ function renderFood(dog) {
     ? `<li><details class="ing"><summary>${head}</summary><div class="ingfull">${esc(ingredients)}</div></details></li>`
     : `<li>${head}</li>`;
   const rows = feed.filter(it => !it.supplement).map(it => {
-    const qty = it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : "");
+    const qty = it.cups_by_meal ? "" : (it.cups ? `${frac(it.cups)} cup ` : (it.per_day > 1 ? `${it.per_day}× ` : ""));
+    const when = it.cups_by_meal
+      ? MEAL_ORDER.filter(m => it.cups_by_meal[m]).map(m => `${frac(it.cups_by_meal[m])} cup ${MEAL_SHORT[m] || m}`).join(" · ")
+      : it.when;
     const per = it.kcal_per_cup ? `${it.kcal_per_cup} kcal/cup` : `${it.kcal} kcal${!it.cups && it.per_day > 1 ? " each" : ""}`;
-    return ingRow(`${qty}${esc(it.item)}${it.when ? ` — ${esc(it.when)}` : ""} <span class="d">(${per})</span>`, it.ingredients);
+    return ingRow(`${qty}${esc(it.item)}${when ? ` — ${esc(when)}` : ""} <span class="d">(${per})</span>`, it.ingredients);
   }).join("");
   const treatRow = t =>
     ingRow(`${esc(t.item)}${t.kcal_per_treat != null ? ` <span class="d">(${t.kcal_per_treat} kcal each)</span>` : ""}`, t.ingredients);
@@ -1498,21 +1508,21 @@ function renderFood(dog) {
 
   // ----- actual calories/day over time: ration in effect each day, minus the
   // meals/bone the eating log records as skipped (so skip days dip accurately) -----
-  const isMealFood = it => it.cups && it.kcal_per_cup;   // a per-meal, cup-measured food
-  const foodMealK = rev =>                                // sum of ALL per-meal foods (kibble + bland, etc.)
-    (rev.items || []).filter(isMealFood).reduce((t, it) => t + it.cups * it.kcal_per_cup, 0);
+  const isMealFood = it => (it.cups || it.cups_by_meal) && it.kcal_per_cup;   // a per-meal, cup-measured food
+  const foodMealK = (rev, meal) =>                        // that meal's share of every per-meal food
+    (rev.items || []).filter(isMealFood).reduce((t, it) => t + cupsAt(it, meal) * it.kcal_per_cup, 0);
   const dayKcal = iso => {
     if (!revisions.length) return null;
     const log = meals[iso] || {};
     // each meal uses the ration in effect at that meal (skips drop that meal)
     let food = 0;
-    MEAL_ORDER.forEach((m, i) => { if (log[m] !== false) food += foodMealK(revAtMeal(iso, i)); });
+    MEAL_ORDER.forEach((m, i) => { if (log[m] !== false) food += foodMealK(revAtMeal(iso, i), m); });
     // once-a-day extras (bone, powder, pills) come from the ration in effect at day's end
     const its = (revAt(iso).items || []);
     const bone = logItemOn("dental", iso);
     const boneK = (bone && log.dental !== false) ? (bone.kcal || 0) : 0;
     const otherK = its.filter(it => !isMealFood(it) && it !== bone)  // powder, pill buddies, chews — always given
-      .reduce((t, it) => t + (it.per_day || 1) * (it.kcal ?? (it.cups || 0) * (it.kcal_per_cup || 0)), 0);
+      .reduce((t, it) => t + (it.per_day || 1) * (it.kcal || 0), 0);
     return food + boneK + otherK + medKcalOn(iso) + (log.other_kcal || 0);
   };
   let dietBlock = "";
