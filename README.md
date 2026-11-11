@@ -9,10 +9,10 @@ Strava's API does not expose the "with pet" tag, so:
 
 - **History** comes from Strava bulk export. Its `activities.csv` *does* include
   a `With Pet` column. 
-- **New activities** pulled from the API and classified by keyword: if the
-  title, description, or private note contains `nala` or `🐾`, it counts
-  automatically. Anything ambiguous gets a quick y/n prompt during `sync`
-  (or later via `review`). 
+- **New activities** are pulled from the API, and which dogs came is never
+  guessed from the title or description — you say, with a quick prompt during
+  `sync` (or later via `review`). The one exception is the activity types in
+  `auto_no_types` (rides, gym sessions), filed automatically as no-dogs.
 
 ## One-time setup
 

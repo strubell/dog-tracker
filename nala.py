@@ -3,14 +3,14 @@
 
 Keeps a local log of activities done with the dog, seeded from a Strava bulk
 export (which includes the "With Pet" tag) and kept current via the Strava API
-(which does NOT expose the tag — new activities are matched by keyword or
-confirmed with a quick y/n).
+(which does NOT expose the tag — which dogs came on a new activity is always
+confirmed by hand).
 
 Commands:
     seed <activities.csv>   import history from a Strava bulk-export CSV
     auth                    one-time Strava API authorization (opens browser)
     sync [--batch]          pull new activities from the API, then rebuild
-    review                  answer y/n for activities the sync couldn't classify
+    review                  say which dogs came on activities awaiting an answer
     mark <id> yes|no        classify one activity by ID
     weight <lb> [--date]    log a weigh-in
     note "<text>" [--date]  log a joint-sign / vet note
@@ -268,22 +268,15 @@ def detect_pet(name, description, private_note, sport_type, cfg):
     return None
 
 
-def detect_dogs(name, description, private_note, sport_type, cfg):
-    """Per-dog attribution for a new activity.
-
-    One dog named in the text wins outright ("Just Nala today" → Nala only).
-    Two or more named is ambiguous — "just Nala, pepper is resting" mentions
-    both — so a human decides. Otherwise fall back to the keyword/auto-no
-    verdict, which applies to every dog."""
-    text = " ".join(filter(None, [name, description, private_note])).lower()
+def detect_dogs(sport_type, cfg):
+    """Which dogs came on a new activity is never guessed — every one is
+    confirmed by hand, during `sync` or later in `review`. The only automatic
+    verdict is a no-dogs one for the activity types in `auto_no_types`, so
+    routine rides and gym sessions don't queue up for confirmation."""
     dogs = dog_names(cfg)
-    named = [d for d in dogs if re.search(rf"\b{re.escape(d.lower())}\b", text)]
-    if len(named) == 1:
-        return {d: (d == named[0]) for d in dogs}
-    if len(named) > 1:
-        return {d: None for d in dogs}
-    pet = detect_pet(name, description, private_note, sport_type, cfg)
-    return {d: pet for d in dogs}
+    if sport_type in cfg.get("auto_no_types", []):
+        return {d: False for d in dogs}
+    return {d: None for d in dogs}
 
 
 def miles_from_home(latlng, cfg):
@@ -346,8 +339,7 @@ def fetch_new_activities(cfg, db, on_each=None):
     new = [a for a in fetched if str(a["id"]) not in db]
     for a in new:
         detail = api_get(f"/activities/{a['id']}")
-        dogs = detect_dogs(detail.get("name"), detail.get("description"),
-                           detail.get("private_note"), detail.get("sport_type"), cfg)
+        dogs = detect_dogs(detail.get("sport_type"), cfg)
         rec = {
             "id": str(a["id"]),
             "date": detail["start_date_local"].rstrip("Z"),
