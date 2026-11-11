@@ -40,6 +40,7 @@ DATA = BASE / "data"
 ACTIVITIES = DATA / "activities.json"
 WEIGHT = DATA / "weight.json"
 NOTES = DATA / "notes.json"
+NOTE_FILES = BASE / "note_files"          # photos/PDFs attached to notes
 CIRCLES = DATA / "circles.json"
 MEALS = DATA / "meals.json"
 GI_LOG = DATA / "gi_incidents.json"
@@ -471,7 +472,7 @@ def load_notes():
 
 
 def log_note(text, d, dog=None):
-    """Notes without a 'dog' field are the primary dog's."""
+    """Notes without a 'dog' field are the primary dog's. Returns the entry."""
     cfg = config()
     log = load_notes()
     entry = {"id": max((n["id"] for n in log), default=0) + 1, "date": d, "text": text}
@@ -480,7 +481,49 @@ def log_note(text, d, dog=None):
     log.append(entry)
     log.sort(key=lambda e: e["date"])
     save(NOTES, log)
-    return dog or cfg["dog"]
+    return entry
+
+
+NOTE_FILE_EXT = (".pdf", ".jpg", ".jpeg", ".png")
+
+
+def add_note_file(note_id, filename, raw):
+    """Attach an uploaded photo or PDF to a note. Stored under note_files/ and
+    listed on the note as `files`. Returns the stored filename."""
+    log = load_notes()
+    n = next((x for x in log if x.get("id") == note_id), None)
+    if n is None:
+        raise KeyError("note not found")
+    stem, ext = os.path.splitext(os.path.basename(filename or "file"))
+    ext = ext.lower()
+    if ext not in NOTE_FILE_EXT:
+        raise ValueError("unsupported file type (use PDF, JPG, or PNG)")
+    NOTE_FILES.mkdir(exist_ok=True)
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._") or "file"
+    name, dest, i = stem + ext, NOTE_FILES / (stem + ext), 1
+    while dest.exists():                       # never overwrite an existing file
+        name = f"{stem}-{i}{ext}"; dest = NOTE_FILES / name; i += 1
+    dest.write_bytes(raw)
+    n.setdefault("files", []).append(name)
+    save(NOTES, log)
+    return name
+
+
+def remove_note_file(note_id, name):
+    """Detach a file from a note, deleting it unless another note still uses it."""
+    log = load_notes()
+    n = next((x for x in log if x.get("id") == note_id), None)
+    if n is None:
+        raise KeyError("note not found")
+    n["files"] = [f for f in (n.get("files") or []) if f != name]
+    if not n["files"]:
+        n.pop("files")
+    save(NOTES, log)
+    if any(name in (x.get("files") or []) for x in log):
+        return
+    f = (NOTE_FILES / os.path.basename(name)).resolve()
+    if f.is_file() and str(f).startswith(str(NOTE_FILES.resolve())):
+        f.unlink()
 
 
 def edit_note(note_id, text=None, date=None):
@@ -503,8 +546,14 @@ def delete_note(note_id):
 
 
 def cmd_note(args):
-    dog = log_note(args.text, _date_arg(args), args.dog)
-    print(f"Noted for {dog} on {_date_arg(args)}: {args.text}")
+    entry = log_note(args.text, _date_arg(args), args.dog)
+    dog = entry.get("dog", config()["dog"])
+    attached = []
+    for path in (args.file or []):
+        f = Path(path)
+        attached.append(add_note_file(entry["id"], f.name, f.read_bytes()))
+    print(f"Noted for {dog} on {_date_arg(args)}: {args.text}"
+          + (f" · attached {', '.join(attached)}" if attached else ""))
     cmd_build(args)
 
 
@@ -1302,6 +1351,20 @@ def render_html(live=False):
                 photos[d] = _img(f"assets/{f.name}", f, mime)
                 break
     payload["photos"] = photos
+    # note attachments: images embedded in the static build, served from
+    # note_files/ by the live server; PDFs always referenced by path
+    for n in payload.get("notes", []):
+        out = []
+        for fn in (n.get("files") or []):
+            f = NOTE_FILES / fn
+            if not f.is_file():
+                continue
+            mime = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png"}.get(f.suffix.lower())
+            rel = f"note_files/{fn}"
+            out.append({"name": fn, "kind": "image", "src": _img(rel, f, mime)} if mime
+                       else {"name": fn, "kind": "file", "src": rel})
+        if out:
+            n["files"] = out
     # origin photos (gallery + labelled siblings), resolved against origins/<dog>/
     def _embed_origin(dog, fname):
         f = BASE / "origins" / dog.lower() / (fname or "")
@@ -1364,7 +1427,7 @@ def cmd_serve(args):
             ext = os.path.splitext(path)[1].lower()
             if ext in _CT:
                 target = (BASE / path.lstrip("/")).resolve()
-                img_dirs = [(BASE / d).resolve() for d in ("vet_records", "assets", "origins", "baby_photos")]
+                img_dirs = [(BASE / d).resolve() for d in ("vet_records", "assets", "origins", "baby_photos", "note_files")]
                 ok_dir = ext == ".pdf" or any(str(target).startswith(str(p)) for p in img_dirs)
                 if (str(target).startswith(str(BASE.resolve()))
                         and ok_dir and target.is_file()):
@@ -1428,14 +1491,26 @@ def cmd_serve(args):
                     log_weight(float(body["lb"]), d, body.get("dog"))
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/note":
-                    if body.get("id") is not None:            # edit or delete an existing note
+                    import base64
+                    nid = body.get("id")
+                    if nid is not None:                       # edit/delete an existing note
+                        nid = int(nid)
                         if body.get("delete"):
-                            delete_note(int(body["id"]))
-                        else:
-                            edit_note(int(body["id"]), body.get("text"), body.get("date"))
+                            delete_note(nid)
+                            return self._send(200, json.dumps({"ok": True}))
+                        if body.get("remove_file"):
+                            remove_note_file(nid, body["remove_file"])
+                        elif body.get("text") is not None or body.get("date"):
+                            edit_note(nid, body.get("text"), body.get("date"))
                     else:                                     # add a new note
                         d = body.get("date") or datetime.now(tz()).date().isoformat()
-                        log_note(body["text"], d, body.get("dog"))
+                        nid = log_note(body["text"], d, body.get("dog"))["id"]
+                    up = body.get("file") or {}
+                    if up.get("data"):
+                        raw = base64.b64decode(up["data"])
+                        if len(raw) > 30 * 1024 * 1024:
+                            return self._send(400, json.dumps({"error": "file too large (max 30 MB)"}))
+                        add_note_file(nid, up.get("filename", ""), raw)
                     return self._send(200, json.dumps({"ok": True}))
                 if self.path == "/api/meal":
                     d = body.get("date") or datetime.now(tz()).date().isoformat()
@@ -1586,6 +1661,8 @@ def main():
     s.add_argument("text")
     s.add_argument("--dog", help="which dog (default the primary one)")
     s.add_argument("--date", help="YYYY-MM-DD (default today)")
+    s.add_argument("--file", action="append", metavar="PATH",
+                   help="attach a photo or PDF (repeatable)")
     s.set_defaults(func=cmd_note)
 
     s = sub.add_parser("build", help="regenerate dashboard.html")

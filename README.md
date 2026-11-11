@@ -42,6 +42,7 @@ python3 nala.py sync            # pull new activities, confirm any unknowns, reb
 open dashboard.html             # look at it
 python3 nala.py weight 53.5 --dog Pepper   # log a weigh-in (--dog optional)
 python3 nala.py note "hesitated on stairs" --dog Nala
+python3 nala.py note "gum looks red" --dog Nala --file ~/Desktop/gum.jpg   # attach a photo
 python3 nala.py meal --dog Pepper --breakfast no --dinner yes --other "broth"
 python3 nala.py review          # classify anything sync left pending
 python3 nala.py mark <id> yes --dog Pepper   # fix one dog on one activity
@@ -106,6 +107,7 @@ the rest of your data still comes from the copied `data/`).
   `config.example.json`. Edit freely; `build` re-renders from it.
 - `data/activities.json` — the activity log; each has a per-dog `dogs` map
   (plus a derived `pet` flag).
+- `note_files/` — photos/PDFs attached to notes (local only, like the other media dirs)
 - `data/weight.json`, `data/notes.json`, `data/meals.json` — your manual logs
   (weight/notes/meals carry an optional `dog`; absent means the primary dog).
 - `dashboard_template.html` → `dashboard.html` — template and rendered output.

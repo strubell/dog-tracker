@@ -175,6 +175,17 @@
   td a { color: var(--series); text-decoration: none; }
   td a:hover { text-decoration: underline; }
 
+  .nfiles { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
+  .nfiles a { display: inline-block; line-height: 0; border-radius: 6px; overflow: hidden;
+              border: 1px solid var(--grid); }
+  .nfiles img { width: 84px; height: 84px; object-fit: cover; display: block; }
+  .nfiles a.nfdoc { line-height: 1.4; padding: 4px 9px; font-size: 12.5px; color: var(--series);
+                    text-decoration: none; background: var(--surface); }
+  .nftag { font-size: 12px; color: var(--ink-2); border: 1px solid var(--grid); border-radius: 999px;
+           padding: 2px 4px 2px 9px; display: inline-flex; align-items: center; gap: 4px; }
+  .nftag button { font: inherit; font-size: 13px; line-height: 1; padding: 1px 6px; border-radius: 999px;
+                  border: none; background: transparent; color: var(--ink-muted); cursor: pointer; }
+  .nftag button:hover { color: var(--bad, #c0392b); }
   ol.phases { list-style: none; margin: 0; padding: 0; }
   ol.phases li { padding: 10px 12px; border-left: 3px solid transparent; border-radius: 6px;
                  margin-bottom: 4px; }
@@ -491,6 +502,7 @@
     <div class="sub" id="notesSub">Stairs hesitation, paw-licking, stiffness, hunger strikes, etc.</div>
     <div class="logrow" style="margin-bottom:12px"><input id="nDate" type="date" style="width:150px">
       <input id="nIn" type="text" placeholder="add a note…" style="width:220px">
+      <input id="nFile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;max-width:190px">
       <button class="btn" id="nBtn">Add note</button></div>
     <ul class="notes" id="notes"></ul>
     <button class="btn" id="notesToggle" style="display:none; margin-top:10px"></button>
@@ -1900,6 +1912,14 @@ function renderMeds(dog) {
 // ---- notes (filtered to the active dog) -------------------------------------------
 let notesShowAll = false;
 const NOTES_PREVIEW = 5;
+// a note's attachments: image thumbnails, other files as labelled links
+function noteFilesHTML(n) {
+  const fs = n.files || [];
+  if (!fs.length) return "";
+  return `<div class="nfiles">` + fs.map(f => f.kind === "image"
+    ? `<a href="${f.src}" target="_blank" rel="noopener" title="${esc(f.name)}"><img src="${f.src}" alt="${esc(f.name)}"></a>`
+    : `<a class="nfdoc" href="${f.src}" target="_blank" rel="noopener">📄 ${esc(f.name)}</a>`).join("") + `</div>`;
+}
 function renderNotes(dog) {
   const card = document.getElementById("notesCard");
   const mine = DATA.notes.filter(n => (n.dog || cfg.dog) === dog).slice().reverse();
@@ -1912,9 +1932,13 @@ function renderNotes(dog) {
   nEl.innerHTML = shown.map(n =>
     `<li${DATA.live ? ` class="noterow" data-id="${n.id}" data-date="${n.date}" data-text="${esc(n.text)}"` : ""}>` +
     `<span class="d">${n.date}</span>` +
-    `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>${esc(n.text)}</li>`).join("");
-  if (DATA.live && window.openNoteEditor)
+    `<span class="dogtag" style="background:${dogColor(dog)}">${esc(dog)}</span>${esc(n.text)}` +
+    noteFilesHTML(n)  + `</li>`).join("");
+  if (DATA.live && window.openNoteEditor) {
     nEl.querySelectorAll("li.noterow").forEach(li => li.onclick = () => window.openNoteEditor(li));
+    // opening an attachment shouldn't drop the note into its editor
+    nEl.querySelectorAll(".nfiles").forEach(d => d.onclick = e => e.stopPropagation());
+  }
   const btn = document.getElementById("notesToggle");
   if (mine.length > NOTES_PREVIEW) {
     btn.style.display = "";
@@ -2202,13 +2226,30 @@ if (DATA.live) {
 
   const nBtn = document.getElementById("nBtn"), nIn = document.getElementById("nIn"), nDate = document.getElementById("nDate");
   if (nDate && !nDate.value) nDate.value = localISO(today);
+  const nFile = document.getElementById("nFile");
+  // read a picked file as base64 for the JSON API; null when nothing is picked
+  const filePayload = async (input) => {
+    const f = input && input.files && input.files[0];
+    if (!f) return null;
+    if (f.size > 30 * 1024 * 1024) throw new Error("file too large (max 30 MB)");
+    const data = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(",")[1]);
+      r.onerror = () => rej(new Error("could not read file"));
+      r.readAsDataURL(f);
+    });
+    return { filename: f.name, data };
+  };
   nBtn.onclick = async () => {
     const text = nIn.value.trim();
     if (!text) return flash("Type a note first");
-    try { await post("/api/note", { text, dog: activeDog, date: nDate.value || null });
-          flash(`${esc(activeDog)} note added — reloading…`);
-          setTimeout(() => location.reload(), 700); }
-    catch (e) { flash("Failed: " + e.message, 4000); }
+    try {
+      const file = await filePayload(nFile);
+      if (file) flash("Uploading…", 60000);
+      await post("/api/note", { text, dog: activeDog, date: nDate.value || null, file });
+      flash(`${esc(activeDog)} note added — reloading…`);
+      setTimeout(() => location.reload(), 700);
+    } catch (e) { flash("Failed: " + e.message, 4000); }
   };
 
   // click a note to edit its text/date (or delete it)
@@ -2222,7 +2263,18 @@ if (DATA.live) {
       `<input class="neText" type="text" value="${esc(text)}" style="${inp}flex:1;min-width:180px">` +
       `<button class="btn primary neSave">Save</button>` +
       `<button class="btn neDel">Delete</button>` +
-      `<button class="btn neCancel">Cancel</button></div>`;
+      `<button class="btn neCancel">Cancel</button></div>` +
+      `<div class="mgrp" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;width:100%;margin-top:6px">` +
+      (DATA.notes.find(x => x.id === id)?.files || []).map(f =>
+        `<span class="nftag">${f.kind === "image" ? "🖼" : "📄"} ${esc(f.name)}` +
+        `<button class="nfDel" data-name="${esc(f.name)}" title="remove">×</button></span>`).join("") +
+      `<input class="neFile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;max-width:190px"></div>`;
+    li.querySelectorAll(".nfDel").forEach(b => b.onclick = async (e) => {
+      e.stopPropagation();
+      try { await post("/api/note", { id, remove_file: b.dataset.name });
+            flash("Removed — reloading…"); setTimeout(() => location.reload(), 600); }
+      catch (err) { flash("Failed: " + err.message, 4000); }
+    });
     li.querySelector(".neCancel").onclick = () => renderNotes(activeDog);
     li.querySelector(".neDel").onclick = async () => {
       try { await post("/api/note", { id, delete: true }); flash("Deleted — reloading…"); setTimeout(() => location.reload(), 600); }
@@ -2231,9 +2283,12 @@ if (DATA.live) {
     li.querySelector(".neSave").onclick = async () => {
       const t = li.querySelector(".neText").value.trim();
       if (!t) return flash("Note can't be empty");
-      try { await post("/api/note", { id, text: t, date: li.querySelector(".neDate").value || null });
-            flash("Saved — reloading…"); setTimeout(() => location.reload(), 600); }
-      catch (e) { flash("Failed: " + e.message, 4000); }
+      try {
+        const file = await filePayload(li.querySelector(".neFile"));
+        if (file) flash("Uploading…", 60000);
+        await post("/api/note", { id, text: t, date: li.querySelector(".neDate").value || null, file });
+        flash("Saved — reloading…"); setTimeout(() => location.reload(), 600);
+      } catch (e) { flash("Failed: " + e.message, 4000); }
     };
   };
 
