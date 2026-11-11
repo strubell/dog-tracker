@@ -22,6 +22,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import ssl
 import sys
 import time
@@ -248,14 +249,41 @@ def api_get(path, **params):
 
 # ---------------------------------------------------------------- sync
 
+def _keyword_hit(text, kw):
+    """Whole-word match for word-like keywords (so "pepperoni" is not Pepper and
+    "nalagonda" is not Nala); plain containment for emoji and punctuated tags."""
+    kw = kw.lower()
+    if re.match(r"\w", kw) and re.search(r"\w$", kw):
+        return re.search(rf"\b{re.escape(kw)}\b", text) is not None
+    return kw in text
+
+
 def detect_pet(name, description, private_note, sport_type, cfg):
     """True/False when confident, None when a human should decide."""
     text = " ".join(filter(None, [name, description, private_note])).lower()
-    if any(k in text for k in cfg["keywords"]):
+    if any(_keyword_hit(text, k) for k in cfg["keywords"]):
         return True
     if sport_type in cfg["auto_no_types"]:
         return False
     return None
+
+
+def detect_dogs(name, description, private_note, sport_type, cfg):
+    """Per-dog attribution for a new activity.
+
+    One dog named in the text wins outright ("Just Nala today" → Nala only).
+    Two or more named is ambiguous — "just Nala, pepper is resting" mentions
+    both — so a human decides. Otherwise fall back to the keyword/auto-no
+    verdict, which applies to every dog."""
+    text = " ".join(filter(None, [name, description, private_note])).lower()
+    dogs = dog_names(cfg)
+    named = [d for d in dogs if re.search(rf"\b{re.escape(d.lower())}\b", text)]
+    if len(named) == 1:
+        return {d: (d == named[0]) for d in dogs}
+    if len(named) > 1:
+        return {d: None for d in dogs}
+    pet = detect_pet(name, description, private_note, sport_type, cfg)
+    return {d: pet for d in dogs}
 
 
 def miles_from_home(latlng, cfg):
@@ -318,8 +346,8 @@ def fetch_new_activities(cfg, db, on_each=None):
     new = [a for a in fetched if str(a["id"]) not in db]
     for a in new:
         detail = api_get(f"/activities/{a['id']}")
-        pet = detect_pet(detail.get("name"), detail.get("description"),
-                         detail.get("private_note"), detail.get("sport_type"), cfg)
+        dogs = detect_dogs(detail.get("name"), detail.get("description"),
+                           detail.get("private_note"), detail.get("sport_type"), cfg)
         rec = {
             "id": str(a["id"]),
             "date": detail["start_date_local"].rstrip("Z"),
@@ -329,9 +357,8 @@ def fetch_new_activities(cfg, db, on_each=None):
             "min": round(detail.get("moving_time", 0) / 60),
             "elev_ft": round(detail.get("total_elevation_gain", 0) * 3.28084),
             "latlng": detail.get("start_latlng") or None,
-            "pet": pet,
-            # keyword hit or auto-no applies to all dogs; unknown → all None
-            "dogs": {d: pet for d in dog_names(cfg)},
+            "pet": derive_pet(dogs),
+            "dogs": dogs,
             "source": "api",
         }
         db[rec["id"]] = rec
