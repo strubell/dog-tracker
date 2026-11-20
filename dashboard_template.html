@@ -1674,12 +1674,13 @@ function renderPetTagGaps() {
       `<a href="https://www.strava.com/activities/${g.id}" target="_blank" rel="noopener">` +
       `${g.date}</a>`).join(" · ");
 }
-function renderBirthday() {
+function renderBirthday(dog) {
   const el = document.getElementById("bdayBanner");
   if (!el) return;
   const b = birthdayToday();
-  el.classList.toggle("show", !!b);
-  if (!b) return;
+  const show = !!b && b.dog === dog;        // only on the birthday dog's own page
+  el.classList.toggle("show", show);
+  if (!show) return;
   const ord = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
   el.innerHTML = `<span class="cake">🎂</span><span>Happy birthday, <b>${esc(b.dog)}</b>!` +
                  ` <span class="d">${ord(b.age)} birthday today.</span></span>`;
@@ -2095,7 +2096,7 @@ function setPage(dog) {
     if (el.classList.contains("cond")) { if (!onPage) el.style.display = "none"; }
     else el.style.display = onPage ? "" : "none";
   });
-  renderBirthday();
+  renderBirthday(dog);
   renderPetTagGaps();
   renderHero(dog);
   renderKpis(dog);
