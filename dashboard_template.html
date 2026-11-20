@@ -71,13 +71,13 @@
     background: var(--series-wash); color: var(--ink); font-weight: 600; font-size: 13px;
   }
   .stamp { color: var(--ink-muted); font-size: 13px; margin-top: 4px; }
-  .bday { display: none; margin-top: 16px; padding: 12px 16px; border-radius: 12px;
+  /* sits inside the hero panel, full width, so the tab still joins the card */
+  .bday { display: none; flex: 0 0 100%; margin: 0 0 -8px; padding: 11px 15px; border-radius: 10px;
           font-size: 15px; align-items: center; gap: 11px;
-          border: 1px solid var(--bday-c); background: var(--bday-wash);
+          border: 1px solid var(--warn); background: var(--warn-wash);
           animation: bdayIn .5s ease-out both; }
   .bday.show { display: flex; }
   .bday .cake { font-size: 22px; line-height: 1; animation: bdayPop 2.4s ease-in-out 3; }
-  .bday b { color: var(--bday-c); }
   .bday .d { color: var(--ink-2); }
   @keyframes bdayIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   @keyframes bdayPop { 0%, 70%, 100% { transform: none; } 80% { transform: scale(1.25) rotate(-8deg); }
@@ -387,8 +387,8 @@
 <div class="page">
   <header>
     <div class="tabs" id="tabs"></div>
-    <div class="bday" id="bdayBanner" data-page="Nala Pepper"></div>
     <div class="hero" id="hero" data-page="Nala Pepper">
+      <div class="bday" id="bdayBanner"></div>
       <img class="heropic" id="heroPic" alt="">
       <div class="heroinfo">
         <h1 id="heroName"></h1>
@@ -1665,8 +1665,6 @@ function renderBirthday() {
   const b = birthdayToday();
   el.classList.toggle("show", !!b);
   if (!b) return;
-  el.style.setProperty("--bday-c", dogColor(b.dog));
-  el.style.setProperty("--bday-wash", dogColor(b.dog) + "1f");   // same hue, ~12% alpha
   const ord = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
   el.innerHTML = `<span class="cake">🎂</span><span>Happy birthday, <b>${esc(b.dog)}</b>!` +
                  ` <span class="d">${ord(b.age)} birthday today.</span></span>`;
