@@ -89,6 +89,8 @@
   }
   .banner.show { display: flex; gap: 10px; align-items: baseline; }
   .banner .dot { color: var(--warn); font-size: 15px; }
+  #petTagBanner span a { color: var(--series); text-decoration: none; white-space: nowrap; }
+  #petTagBanner span a:hover { text-decoration: underline; }
   code { background: var(--band); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
 
   .toolbar { display: none; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
@@ -401,6 +403,7 @@
       </div>
     </div>
     <div class="banner" id="banner" data-page="Nala"><span class="dot">⚠︎</span><span id="bannerText"></span></div>
+    <div class="banner" id="petTagBanner" data-page="Nala Pepper"><span class="dot">⚑</span><span id="petTagText"></span></div>
     <div class="toolbar" id="toolbar">
       <button class="btn primary" id="syncBtn">↻ Sync now</button>
     </div>
@@ -1659,6 +1662,18 @@ function birthdayToday() {
   }
   return null;
 }
+// outings a dog came on that have no "With Pet" tag on Strava — Garmin knew,
+// Strava wasn't told. Listed with links so they can be fixed where they're edited.
+function renderPetTagGaps() {
+  const el = document.getElementById("petTagBanner"), txt = document.getElementById("petTagText");
+  const gaps = DATA.missing_pet_tag || [];
+  el.classList.toggle("show", gaps.length > 0);
+  if (!gaps.length) return;
+  txt.innerHTML = `<b>${gaps.length} dog outing${gaps.length > 1 ? "s" : ""} missing the ` +
+    `“With Pet” tag on Strava</b> ` + gaps.map(g =>
+      `<a href="https://www.strava.com/activities/${g.id}" target="_blank" rel="noopener">` +
+      `${g.date}</a>`).join(" · ");
+}
 function renderBirthday() {
   const el = document.getElementById("bdayBanner");
   if (!el) return;
@@ -2081,6 +2096,7 @@ function setPage(dog) {
     else el.style.display = onPage ? "" : "none";
   });
   renderBirthday();
+  renderPetTagGaps();
   renderHero(dog);
   renderKpis(dog);
   renderNotes(dog);

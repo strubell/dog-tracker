@@ -269,6 +269,36 @@ def detect_pet(name, description, private_note, sport_type, cfg):
     return None
 
 
+def garmin_dog_map(cfg, since, until):
+    """{local start "YYYY-MM-DDTHH:MM:SS" -> set of dog names} from Garmin's own
+    dog tags, for activities between two ISO dates. An activity present with no
+    dog maps to an empty set (a definite "no dogs"); one Garmin never saw is
+    simply absent, so it still goes to review. Returns {} — i.e. changes
+    nothing — if the library, the token or the network isn't there."""
+    g = cfg.get("garmin") or {}
+    ids = {str(k): v for k, v in (g.get("dog_profile_ids") or {}).items()}
+    if not ids:
+        return {}
+    try:
+        from garminconnect import Garmin
+    except ImportError:
+        print("  (garminconnect not installed — dogs will be confirmed by hand)")
+        return {}
+    try:
+        api = Garmin()
+        api.login(os.path.expanduser(g.get("tokenstore") or "~/.garminconnect"))
+        acts = api.get_activities_by_date(since, until)
+    except Exception as e:
+        print(f"  (Garmin unavailable: {e} — dogs will be confirmed by hand)")
+        return {}
+    out = {}
+    for a in acts:
+        st = (a.get("startTimeLocal") or "").replace(" ", "T")[:19]
+        if st:
+            out[st] = {ids[str(i)] for i in (a.get("dogProfileIds") or []) if str(i) in ids}
+    return out
+
+
 def detect_dogs(sport_type, cfg):
     """Which dogs came on a new activity is never guessed — every one is
     confirmed by hand, during `sync` or later in `review`. The only automatic
@@ -338,9 +368,17 @@ def fetch_new_activities(cfg, db, on_each=None):
             break
         page += 1
     new = [a for a in fetched if str(a["id"]) not in db]
+    garmin = {}
+    if new:
+        span = sorted(a["start_date_local"][:10] for a in new)
+        garmin = garmin_dog_map(cfg, span[0], span[-1])
     for a in new:
         detail = api_get(f"/activities/{a['id']}")
         dogs = detect_dogs(detail.get("sport_type"), cfg)
+        start_local = detail["start_date_local"].rstrip("Z")[:19]
+        tagged = garmin.get(start_local)            # None = Garmin has no such activity
+        if tagged is not None and any(v is None for v in dogs.values()):
+            dogs = {d: (d in tagged) for d in dog_names(cfg)}
         rec = {
             "id": str(a["id"]),
             "date": detail["start_date_local"].rstrip("Z"),
@@ -352,6 +390,8 @@ def fetch_new_activities(cfg, db, on_each=None):
             "latlng": detail.get("start_latlng") or None,
             "pet": derive_pet(dogs),
             "dogs": dogs,
+            # Strava's own "With Pet" tag, so a forgotten one can be flagged
+            "pet_tag": "WithPet" in (detail.get("tags") or []),
             "source": "api",
         }
         db[rec["id"]] = rec
@@ -359,6 +399,15 @@ def fetch_new_activities(cfg, db, on_each=None):
         if on_each:
             on_each(rec, _away_hint(rec, cfg))
     return len(fetched), len(new)
+
+
+def missing_pet_tag(db, limit=10):
+    """Dog outings Strava has no 'With Pet' tag on — usually a forgotten tag.
+    Only activities pulled since the tag started being recorded can be judged."""
+    out = [r for r in db.values()
+           if r.get("pet") is True and r.get("pet_tag") is False]
+    out.sort(key=lambda r: r["date"], reverse=True)
+    return out[:limit]
 
 
 def cmd_sync(args):
@@ -378,6 +427,9 @@ def cmd_sync(args):
 
     n_all, n_new = fetch_new_activities(cfg, db, on_each=log_one)
     print(f"{n_all} activities checked, {n_new} new.")
+    for r in missing_pet_tag(db):
+        print(f"  ⚑ no 'With Pet' tag on Strava: {r['date'][:10]} {r['name'][:40]!r}"
+              f" — https://www.strava.com/activities/{r['id']}")
     pending = sum(1 for r in db.values() if r["pet"] is None)
     if pending:
         print(f"{pending} unclassified — run `python3 nala.py review`.")
@@ -1324,6 +1376,8 @@ def build_payload(cfg, db):
         "origins": load_origins(cfg),
         "vax": load_vax(cfg),
         "meds": load_meds(cfg),
+        "missing_pet_tag": [{"id": r["id"], "date": r["date"][:10], "name": r["name"],
+                             "dogs": r.get("dogs") or {}} for r in missing_pet_tag(db)],
         "generated": datetime.now(tz()).isoformat(timespec="minutes"),
     }
 
