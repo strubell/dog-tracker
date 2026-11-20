@@ -398,7 +398,27 @@ def fetch_new_activities(cfg, db, on_each=None):
         save(ACTIVITIES, db)
         if on_each:
             on_each(rec, _away_hint(rec, cfg))
+    refresh_pet_tags(db)
     return len(fetched), len(new)
+
+
+def refresh_pet_tags(db, limit=20):
+    """Re-check Strava's "With Pet" tag on outings currently flagged as missing
+    it, so a tag added later clears the flag by itself on the next sync."""
+    flagged = [r for r in db.values() if r.get("pet") is True and r.get("pet_tag") is False]
+    flagged.sort(key=lambda r: r["date"], reverse=True)
+    cleared = 0
+    for r in flagged[:limit]:
+        try:
+            d = api_get(f"/activities/{r['id']}")
+        except Exception:
+            continue
+        if "WithPet" in (d.get("tags") or []):
+            r["pet_tag"] = True
+            cleared += 1
+    if cleared:
+        save(ACTIVITIES, db)
+    return cleared
 
 
 def missing_pet_tag(db, limit=10):
