@@ -368,17 +368,9 @@ def fetch_new_activities(cfg, db, on_each=None):
             break
         page += 1
     new = [a for a in fetched if str(a["id"]) not in db]
-    garmin = {}
-    if new:
-        span = sorted(a["start_date_local"][:10] for a in new)
-        garmin = garmin_dog_map(cfg, span[0], span[-1])
     for a in new:
         detail = api_get(f"/activities/{a['id']}")
         dogs = detect_dogs(detail.get("sport_type"), cfg)
-        start_local = detail["start_date_local"].rstrip("Z")[:19]
-        tagged = garmin.get(start_local)            # None = Garmin has no such activity
-        if tagged is not None and any(v is None for v in dogs.values()):
-            dogs = {d: (d in tagged) for d in dog_names(cfg)}
         rec = {
             "id": str(a["id"]),
             "date": detail["start_date_local"].rstrip("Z"),
@@ -398,8 +390,36 @@ def fetch_new_activities(cfg, db, on_each=None):
         save(ACTIVITIES, db)
         if on_each:
             on_each(rec, _away_hint(rec, cfg))
+    classify_from_garmin(cfg, db)
     refresh_pet_tags(db)
     return len(fetched), len(new)
+
+
+def classify_from_garmin(cfg, db, days=45):
+    """Fill in which dogs came, for any recent activity still unanswered, from
+    Garmin's own dog tags (matched on local start time). Runs on every sync, so
+    an outing that arrived while Garmin was unreachable — or before Garmin had
+    finished processing it — resolves itself later instead of sitting in review.
+    Activities Garmin never saw are left alone for a human to answer."""
+    cutoff = (datetime.now(tz()).date() - timedelta(days=days)).isoformat()
+    pending = [r for r in db.values()
+               if r.get("pet") is None and r["date"][:10] >= cutoff]
+    if not pending:
+        return 0
+    span = sorted(r["date"][:10] for r in pending)
+    garmin = garmin_dog_map(cfg, span[0], span[-1])
+    n = 0
+    for r in pending:
+        tagged = garmin.get(r["date"][:19])
+        if tagged is None:
+            continue
+        r["dogs"] = {d: (d in tagged) for d in dog_names(cfg)}
+        r["pet"] = derive_pet(r["dogs"])
+        n += 1
+    if n:
+        save(ACTIVITIES, db)
+        print(f"  {n} activity(ies) classified from Garmin's dog tags")
+    return n
 
 
 def refresh_pet_tags(db, limit=20):
