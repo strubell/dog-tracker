@@ -107,6 +107,10 @@ the rest of your data still comes from the copied `data/`).
   `config.example.json`. Edit freely; `build` re-renders from it.
 - `data/activities.json` — the activity log; each has a per-dog `dogs` map
   (plus a derived `pet` flag).
+- `garmin_login.py` — one-time interactive Garmin login for this machine, so
+  `sync` can read Garmin's dog tags (`.venv/bin/python garmin_login.py`). Give
+  each machine its own login rather than copying a token between them; tokens
+  rotate, and a copy goes stale behind the original.
 - `note_files/` — photos/PDFs attached to notes (local only, like the other media dirs)
 - `data/weight.json`, `data/notes.json`, `data/meals.json` — your manual logs
   (weight/notes/meals carry an optional `dog`; absent means the primary dog).
