@@ -395,12 +395,29 @@ def fetch_new_activities(cfg, db, on_each=None):
     return len(fetched), len(new)
 
 
+NO_DOG_GRACE_H = 8       # how long to wait before trusting a Garmin "no dogs"
+
+
+def _hours_since(iso, now):
+    """Hours between an activity's local start and now; +inf if unparseable."""
+    try:
+        t = datetime.fromisoformat(iso)
+    except ValueError:
+        return float("inf")
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=now.tzinfo)
+    return (now - t).total_seconds() / 3600
+
+
 def classify_from_garmin(cfg, db, days=45):
     """Fill in which dogs came, for any recent activity still unanswered, from
     Garmin's own dog tags (matched on local start time). Runs on every sync, so
     an outing that arrived while Garmin was unreachable — or before Garmin had
     finished processing it — resolves itself later instead of sitting in review.
-    Activities Garmin never saw are left alone for a human to answer."""
+    Activities Garmin never saw are left alone for a human to answer. A Garmin
+    verdict of "no dogs" is only trusted once the activity is a few hours old,
+    since the dog tag is often added in the Garmin app after the upload — before
+    that, a missing tag is indistinguishable from one not yet applied."""
     cutoff = (datetime.now(tz()).date() - timedelta(days=days)).isoformat()
     pending = [r for r in db.values()
                if r.get("pet") is None and r["date"][:10] >= cutoff]
@@ -408,11 +425,14 @@ def classify_from_garmin(cfg, db, days=45):
         return 0
     span = sorted(r["date"][:10] for r in pending)
     garmin = garmin_dog_map(cfg, span[0], span[-1])
+    now = datetime.now(tz())
     n = 0
     for r in pending:
         tagged = garmin.get(r["date"][:19])
         if tagged is None:
             continue
+        if not tagged and _hours_since(r["date"], now) < NO_DOG_GRACE_H:
+            continue      # "no dogs" this soon may just mean it isn't tagged yet
         r["dogs"] = {d: (d in tagged) for d in dog_names(cfg)}
         r["pet"] = derive_pet(r["dogs"])
         n += 1
